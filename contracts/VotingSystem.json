@@ -1,0 +1,538 @@
+{
+    "contractName": "VotingSystemABI",
+    "abi": [
+      {
+        "inputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "electionId",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "candidateId",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "indexed": false,
+            "internalType": "string",
+            "name": "details",
+            "type": "string"
+          }
+        ],
+        "name": "CandidateAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "electionId",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "indexed": false,
+            "internalType": "uint256",
+            "name": "startTime",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "uint256",
+            "name": "endTime",
+            "type": "uint256"
+          }
+        ],
+        "name": "ElectionCreated",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "electionId",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "bool",
+            "name": "active",
+            "type": "bool"
+          }
+        ],
+        "name": "ElectionStatusChanged",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "previousOwner",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "newOwner",
+            "type": "address"
+          }
+        ],
+        "name": "OwnershipTransferred",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "electionId",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "voter",
+            "type": "address"
+          }
+        ],
+        "name": "VoterRegistered",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "electionId",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "candidateId",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "voter",
+            "type": "address"
+          }
+        ],
+        "name": "VoteSubmitted",
+        "type": "event"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "_name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "_details",
+            "type": "string"
+          }
+        ],
+        "name": "addCandidate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "_candidateId",
+            "type": "uint256"
+          }
+        ],
+        "name": "castVote",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "string",
+            "name": "_name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "_description",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "_startTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "_endTime",
+            "type": "uint256"
+          }
+        ],
+        "name": "createElection",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "electionCount",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "name": "elections",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "id",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "startTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "endTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "candidateCount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalVotes",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "active",
+            "type": "bool"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_candidateId",
+            "type": "uint256"
+          }
+        ],
+        "name": "getCandidateInfo",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          }
+        ],
+        "name": "getElectionCandidates",
+        "outputs": [
+          {
+            "internalType": "uint256[]",
+            "name": "",
+            "type": "uint256[]"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "_voter",
+            "type": "address"
+          }
+        ],
+        "name": "getUserVote",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "_voter",
+            "type": "address"
+          }
+        ],
+        "name": "getUserVoteTimestamp",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          }
+        ],
+        "name": "isElectionActive",
+        "outputs": [
+          {
+            "internalType": "bool",
+            "name": "",
+            "type": "bool"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "_voter",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "_name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "_idNumber",
+            "type": "string"
+          }
+        ],
+        "name": "registerVoter",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "renounceOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "_active",
+            "type": "bool"
+          }
+        ],
+        "name": "setElectionStatus",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "newOwner",
+            "type": "address"
+          }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_electionId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "_voter",
+            "type": "address"
+          }
+        ],
+        "name": "voterStatus",
+        "outputs": [
+          {
+            "internalType": "enum VotingSystem.VoterStatus",
+            "name": "",
+            "type": "uint8"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ],
+    "metadata": "{\"compiler\":{\"version\":\"0.8.19+commit.7dd6d404\"},\"language\":\"Solidity\",\"output\":{\"abi\":[...],\"devdoc\":{\"kind\":\"dev\",\"methods\":{...},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"project:/contracts/VotingSystem.sol\":\"VotingSystem\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":false,\"runs\":200},\"remappings\":[]},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"keccak256\":\"...\",\"license\":\"MIT\",\"urls\":[\"...\"]},\"@openzeppelin/contracts/utils/Context.sol\":{\"keccak256\":\"...\",\"license\":\"MIT\",\"urls\":[\"...\"]},\"project:/contracts/VotingSystem.sol\":{\"keccak256\":\"...\",\"license\":\"MIT\",\"urls\":[\"...\"]}},\"version\":1}",
+    "bytecode": "0x60806040523480156200001157600080fd5b50600062000023620000e160201b60201c565b9050806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055508073ffffffffffffffffffffffffffffffffffffffff16600073ffffffffffffffffffffffffffffffffffffffff167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e060405160405180910390a35062000100565b600033905090565b612a5380620001106000396000f3...",
+    "deployedBytecode": "0x608060405234801561001057600080fd5b50600436106100ea5760003560e01c8063783599351161008c578063b2c5f94d11610066578063b2c5f94d146102e9578063c9ba2e301461031a578063f2fde38b1461034b578063f5bfa0b21461036757610101565b806378359935146102705780638da5cb5b146102a0578063a3ec138d146102be57610101565b80632e1a7d4d116100c85780632e1a7d4d146101c65780634665096d146101f65780635f274e83146102145780636c59f95d1461024457610101565b80630121b93f146101065780631d1f084d146101225780631fce304d1461015357610101565b366101015761010060003661043b565b005b600080fd5b610120600480360381019061011b9190612147565b610457565b005b61013c60048036038101906101379190612147565b6106c4565b60405161014a929190612198565b60405180910390f35b61016d60048036038101906101689190612147565b61071f565b60405161017d9493929190612233565b60405180910390f35b6101e0600480360381019061011b9190612147565b61080b565b00405...",
+    "immutableReferences": {},
+    "generatedSources": [],
+    "deployedGeneratedSources": [],
+    "sourceMap": "129:7546:3:-:0;;;1174:85;;;;;;;;;;1227:14;1244:7;:5;;;:7;;:::i;:::-;1227:24;;1269:4;1261:5;;:12;;;;;;;;;;;;;;;;;;1309:4;1289:25;;:5;;;:25;;;1311:40;;1327:4;1333:5;;;:17;;1311:40;:::i;:::-;129:7546;;1351:90;1389:7;1415:12;1408:19;;1351:90;:::o;129:7546::-;;;;;;;",
+    "source": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract VotingSystem is Ownable {\n    // Election struct\n    struct Election {\n        uint256 id;\n        string name;\n        string description;\n        uint256 startTime;\n        uint256 endTime;\n        uint256 candidateCount;\n        uint256 totalVotes;\n        bool active;\n        mapping(uint256 => bool) candidateExists;\n        mapping(address => Voter) voters;\n    }\n\n    // Candidate struct\n    struct Candidate {\n        uint256 id;\n        uint256 electionId;\n        string name;\n        string details;\n        uint256 voteCount;\n    }\n\n    // Voter struct\n    struct Voter {\n        string name;\n        string idNumber;\n        VoterStatus status;\n        uint256 votedFor;\n        uint256 timestamp;\n    }\n\n    // Enum for voter status\n    enum VoterStatus { NotRegistered, Registered, Voted }\n\n    // Counter for elections\n    uint256 public electionCount;\n    // Counter for candidates\n    uint256 private candidateCount;\n\n    // Mapping for elections\n    mapping(uint256 => Election) public elections;\n    // Mapping for candidates\n    mapping(uint256 => Candidate) private candidates;\n    // Mapping to store election candidates\n    mapping(uint256 => uint256[]) private electionCandidates;\n\n    // Events\n    event ElectionCreated(uint256 indexed electionId, string name, uint256 startTime, uint256 endTime);\n    event CandidateAdded(uint256 indexed electionId, uint256 indexed candidateId, string name, string details);\n    event VoterRegistered(uint256 indexed electionId, address indexed voter);\n    event VoteSubmitted(uint256 indexed electionId, uint256 indexed candidateId, address indexed voter);\n    event ElectionStatusChanged(uint256 indexed electionId, bool active);\n\n    // Constructor\n    constructor() {\n        address owner = _msgSender(); // Get the address of the account creating the contract\n        _transferOwnership(owner); // Transfer ownership to the creator\n        emit OwnershipTransferred(address(0), owner); // Emit event that ownership has been transferred\n    }\n\n    // Create a new election\n    function createElection(\n        string memory _name,\n        string memory _description,\n        uint256 _startTime,\n        uint256 _endTime\n    ) public onlyOwner returns (uint256) {\n        require(_startTime < _endTime, \"End time must be after start time\");\n        require(_endTime > block.timestamp, \"End time must be in the future\");\n\n        electionCount++;\n        uint256 electionId = electionCount;\n\n        Election storage e = elections[electionId];\n        e.id = electionId;\n        e.name = _name;\n        e.description = _description;\n        e.startTime = _startTime;\n        e.endTime = _endTime;\n        e.active = true;\n\n        emit ElectionCreated(electionId, _name, _startTime, _endTime);\n\n        return electionId;\n    }\n\n    // Add a candidate to an election\n    function addCandidate(\n        uint256 _electionId,\n        string memory _name,\n        string memory _details\n    ) public onlyOwner {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        require(block.timestamp < elections[_electionId].startTime, \"Election has already started\");\n        \n        candidateCount++;\n        uint256 candidateId = candidateCount;\n        \n        Candidate storage c = candidates[candidateId];\n        c.id = candidateId;\n        c.electionId = _electionId;\n        c.name = _name;\n        c.details = _details;\n        c.voteCount = 0;\n        \n        elections[_electionId].candidateCount++;\n        elections[_electionId].candidateExists[candidateId] = true;\n        electionCandidates[_electionId].push(candidateId);\n        \n        emit CandidateAdded(_electionId, candidateId, _name, _details);\n    }\n\n    // Register a voter for an election\n    function registerVoter(\n        uint256 _electionId,\n        address _voter,\n        string memory _name,\n        string memory _idNumber\n    ) public {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        require(elections[_electionId].voters[_voter].status == VoterStatus.NotRegistered, \"Voter already registered\");\n        \n        Voter storage v = elections[_electionId].voters[_voter];\n        v.name = _name;\n        v.idNumber = _idNumber;\n        v.status = VoterStatus.Registered;\n        \n        emit VoterRegistered(_electionId, _voter);\n    }\n\n    // Cast a vote\n    function castVote(uint256 _electionId, uint256 _candidateId) public {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        require(isElectionActive(_electionId), \"Election is not active\");\n        require(block.timestamp >= elections[_electionId].startTime, \"Election has not started yet\");\n        require(block.timestamp <= elections[_electionId].endTime, \"Election has ended\");\n        require(elections[_electionId].voters[msg.sender].status == VoterStatus.Registered, \"Voter not registered or already voted\");\n        require(elections[_electionId].candidateExists[_candidateId], \"Invalid candidate ID\");\n        \n        Voter storage voter = elections[_electionId].voters[msg.sender];\n        voter.status = VoterStatus.Voted;\n        voter.votedFor = _candidateId;\n        voter.timestamp = block.timestamp;\n        \n        candidates[_candidateId].voteCount++;\n        elections[_electionId].totalVotes++;\n        \n        emit VoteSubmitted(_electionId, _candidateId, msg.sender);\n    }\n\n    // Set election active status\n    function setElectionStatus(uint256 _electionId, bool _active) public onlyOwner {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        elections[_electionId].active = _active;\n        emit ElectionStatusChanged(_electionId, _active);\n    }\n\n    // Check if an election is active\n    function isElectionActive(uint256 _electionId) public view returns (bool) {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        return elections[_electionId].active;\n    }\n\n    // Get voter status\n    function voterStatus(uint256 _electionId, address _voter) public view returns (VoterStatus) {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        return elections[_electionId].voters[_voter].status;\n    }\n\n    // Get all candidates for an election\n    function getElectionCandidates(uint256 _electionId) public view returns (uint256[] memory) {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        return electionCandidates[_electionId];\n    }\n\n    // Get candidate information\n    function getCandidateInfo(uint256 _candidateId) public view returns (uint256, string memory, string memory, uint256) {\n        require(_candidateId > 0 && _candidateId <= candidateCount, \"Invalid candidate ID\");\n        Candidate memory c = candidates[_candidateId];\n        return (c.id, c.name, c.details, c.voteCount);\n    }\n\n    // Get user's vote\n    function getUserVote(uint256 _electionId, address _voter) public view returns (uint256) {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        require(elections[_electionId].voters[_voter].status == VoterStatus.Voted, \"User has not voted\");\n        return elections[_electionId].voters[_voter].votedFor;\n    }\n\n    // Get user's vote timestamp\n    function getUserVoteTimestamp(uint256 _electionId, address _voter) public view returns (uint256) {\n        require(_electionId > 0 && _electionId <= electionCount, \"Invalid election ID\");\n        require(elections[_electionId].voters[_voter].status == VoterStatus.Voted, \"User has not voted\");\n        return elections[_electionId].voters[_voter].timestamp;\n    }\n}",
+    "sourcePath": "/path/to/contracts/VotingSystem.sol",
+    "networks": {
+      "5777": {
+        "events": {},
+        "links": {},
+        "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "transactionHash": "0x9b670d9e9de05dc060c9e2d8c4ae45daa9d5fd5d87cee0e65d0b69c72c4fe5df"
+      }
+    },
+    "schemaVersion": "3.4.10",
+    "updatedAt": "2025-05-11T10:00:00.000Z"
+  }

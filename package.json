@@ -1,0 +1,57 @@
+{
+  "name": "voting-system",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "react-scripts start",
+    "dev": "vite",
+    "build": "react-scripts build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.6",
+    "@truffle/contract": "^4.6.31",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^6.30.0",
+    "react-scripts": "^5.0.1",
+    "react-toastify": "^11.0.5",
+    "tailwindcss": "^4.1.6",
+    "web3": "^4.16.0"
+  },
+  "devDependencies": {
+    "@chainlink/contracts": "^1.4.0",
+    "@chainlink/external-adapter": "^0.2.6",
+    "@eslint/js": "^9.25.0",
+    "@openzeppelin/contracts": "^5.3.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "body-parser": "^2.2.0",
+    "crypto": "^1.0.1",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "express": "^5.1.0",
+    "globals": "^16.0.0",
+    "hardhat": "^2.24.0",
+    "truffle": "^5.11.5",
+    "vite": "^6.3.5"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
