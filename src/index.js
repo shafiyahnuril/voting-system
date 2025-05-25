@@ -1,31 +1,33 @@
-// src/index.js - File entri utama untuk aplikasi React
-
-// import React from 'react';
-// import ReactDOM from 'react-dom';
-// import { BrowserRouter as Router } from 'react-router-dom';
-// import App from './App.js';
-// import './index.css';
-// import { Web3Provider } from './contexts/Web3Context.js';
-// import { createRoot } from 'react-dom/client';
+// src/index.js - Entry point aplikasi
 
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App.js';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import { BrowserRouter } from 'react-router-dom';
+import { Web3Provider } from './contexts/Web3Context'; // Named import
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-// ReactDOM.render(
-//   <React.StrictMode>
-//     <Web3Provider>
-//       <Router>
-//         <App />
-//       </Router>
-//     </Web3Provider>
-//   </React.StrictMode>,
-//   document.getElementById('root')
-// );
-
-const root = createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <Web3Provider>
+        <App />
+        <ToastContainer
+          position="top-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+        />
+      </Web3Provider>
+    </BrowserRouter>
   </React.StrictMode>
 );

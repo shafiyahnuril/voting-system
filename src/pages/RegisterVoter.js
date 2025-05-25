@@ -11,7 +11,7 @@ const RegisterVoter = () => {
   const [searchParams] = useSearchParams();
   const electionId = searchParams.get('election');
   
-  const { contract, accounts, connected, connectWallet } = useContext(Web3Context);
+  const { contract, accounts, connected, connectWallet, web3 } = useContext(Web3Context);
   
   const [elections, setElections] = useState([]);
   const [selectedElectionId, setSelectedElectionId] = useState(electionId || '');
@@ -150,13 +150,14 @@ const RegisterVoter = () => {
     try {
       setSubmitting(true);
       
-      // Hash NIK dan nama untuk verifikasi identitas (simulasi)
-      // Dalam implementasi nyata, verifikasi identitas seharusnya dilakukan secara lebih aman
-      const hashedId = web3.utils.soliditySha3(nik, fullName);
-      
       // Panggil fungsi registerVoter pada smart contract
-      await contract.methods.registerVoter(selectedElectionId, hashedId)
-        .send({ from: accounts[0] });
+      // Mengirim NIK dan nama langsung ke smart contract
+      await contract.methods.registerVoter(
+        selectedElectionId, 
+        accounts[0], 
+        fullName, 
+        nik
+      ).send({ from: accounts[0] });
       
       toast.success("Pendaftaran berhasil!");
       
@@ -222,7 +223,7 @@ const RegisterVoter = () => {
   }
   
   return (
-    <div>
+    <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Pendaftaran Pemilih</h1>
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -263,69 +264,108 @@ const RegisterVoter = () => {
                   <p className="text-gray-800">{formatDate(selectedElection.endTime)}</p>
                 </div>
               </div>
+              <div className="mt-3">
+                <p className="text-sm text-gray-500">Status</p>
+                <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${
+                  selectedElection.status === 'active' ? 'bg-green-100 text-green-800' :
+                  selectedElection.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {selectedElection.status === 'active' ? 'Aktif' :
+                   selectedElection.status === 'upcoming' ? 'Akan Datang' :
+                   'Berakhir'}
+                </span>
+              </div>
             </div>
           )}
           
-          {/* Data Pemilih */}
+          {/* Input NIK */}
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Data Pemilih</h2>
-            
-            <div className="mb-4">
-              <label htmlFor="nik" className="block text-gray-700 font-medium mb-2">
-                NIK (Nomor Induk Kependudukan)
-              </label>
-              <input
-                type="text"
-                id="nik"
-                value={nik}
-                onChange={(e) => setNik(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="16 digit NIK"
-                maxLength="16"
-                pattern="\d{16}"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                {nik.length}/16 digit
-              </p>
-            </div>
-            
-            <div className="mb-4">
-              <label htmlFor="fullName" className="block text-gray-700 font-medium mb-2">
-                Nama Lengkap
-              </label>
-              <input
-                type="text"
-                id="fullName"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Sesuai dengan KTP"
-                required
-              />
-            </div>
+            <label htmlFor="nik" className="block text-gray-700 font-medium mb-2">
+              NIK (Nomor Induk Kependudukan)
+            </label>
+            <input
+              type="text"
+              id="nik"
+              value={nik}
+              onChange={(e) => setNik(e.target.value.replace(/\D/g, '').slice(0, 16))}
+              placeholder="Masukkan 16 digit NIK"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              maxLength="16"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              NIK harus terdiri dari 16 digit angka
+            </p>
           </div>
           
-          {/* Submit Button */}
-          <div className="flex justify-center mt-8">
+          {/* Input Nama Lengkap */}
+          <div className="mb-6">
+            <label htmlFor="fullName" className="block text-gray-700 font-medium mb-2">
+              Nama Lengkap
+            </label>
+            <input
+              type="text"
+              id="fullName"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Masukkan nama lengkap sesuai KTP"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          {/* Informasi Wallet */}
+          <div className="bg-blue-50 p-4 rounded-md mb-6">
+            <h3 className="font-medium text-blue-800 mb-2">Informasi Wallet</h3>
+            <p className="text-sm text-blue-600">
+              Alamat Wallet: {accounts[0]}
+            </p>
+            <p className="text-xs text-blue-500 mt-1">
+              Alamat wallet ini akan digunakan sebagai identitas digital Anda dalam sistem voting.
+            </p>
+          </div>
+          
+          {/* Tombol Submit */}
+          <div className="flex flex-col sm:flex-row gap-4">
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300"
-              disabled={submitting}
+              disabled={submitting || !selectedElectionId || !nik || !fullName}
+              className={`flex-1 py-3 px-6 rounded-md font-medium transition duration-300 ${
+                submitting || !selectedElectionId || !nik || !fullName
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
             >
-              {submitting ? 'Memproses...' : 'Daftar Sebagai Pemilih'}
+              {submitting ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Mendaftar...
+                </div>
+              ) : (
+                'Daftar sebagai Pemilih'
+              )}
             </button>
+            
+            <Link
+              to="/elections"
+              className="flex-1 py-3 px-6 text-center border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition duration-300"
+            >
+              Kembali ke Daftar Pemilihan
+            </Link>
           </div>
         </form>
       </div>
       
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-bold text-blue-800 mb-2">Informasi Penting</h3>
-        <ul className="list-disc pl-5 text-blue-700">
-          <li className="mb-1">Pendaftaran pemilih akan memerlukan transaksi blockchain dan biaya gas.</li>
-          <li className="mb-1">Data identitas Anda akan di-hash dan disimpan dalam blockchain untuk verifikasi.</li>
-          <li className="mb-1">Setiap alamat wallet hanya dapat mendaftar sekali untuk setiap pemilihan.</li>
-          <li className="mb-1">Pastikan informasi yang dimasukkan sudah benar sebelum mendaftar.</li>
+      {/* Informasi Tambahan */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <h3 className="font-medium text-yellow-800 mb-2">⚠️ Penting untuk Diketahui</h3>
+        <ul className="text-sm text-yellow-700 space-y-1">
+          <li>• Pastikan NIK yang Anda masukkan valid dan benar</li>
+          <li>• Nama lengkap harus sesuai dengan data KTP</li>
+          <li>• Setelah terdaftar, Anda dapat memberikan suara pada waktu yang telah ditentukan</li>
+          <li>• Satu wallet hanya dapat digunakan untuk satu pendaftaran per pemilihan</li>
+          <li>• Proses pendaftaran akan dicatat dalam blockchain dan tidak dapat diubah</li>
         </ul>
       </div>
     </div>

@@ -3,7 +3,17 @@ import { Link } from 'react-router-dom';
 import { Web3Context } from '../contexts/Web3Context.js';
 
 const Navbar = () => {
-  const { connected, connectWallet, accounts } = useContext(Web3Context);
+  // Gunakan nilai default jika context adalah null
+  const context = useContext(Web3Context);
+  
+  // Jika context null, gunakan nilai default
+  const { connected = false, accounts = [] } = context || {};
+  
+  // Fungsi connectWallet yang aman
+  const connectWallet = context?.connectWallet || (() => {
+    console.error("Web3Context tidak tersedia. Periksa Provider.");
+    alert("Tidak dapat terhubung ke wallet. Silahkan muat ulang halaman.");
+  });
 
   return (
     <nav className="bg-blue-800 text-white shadow-lg">
