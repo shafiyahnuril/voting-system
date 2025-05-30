@@ -1,42 +1,575 @@
-// src/contexts/Web3Context.js - Updated dengan logout functionality
+// src/contexts/Web3Context.js - Fixed dengan ABI lengkap
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
 import { toast } from 'react-toastify';
 
-// Import contract ABI dari file JSON
-import VotingSystemContract from '../contracts/VotingSystem.json';
-
-// Simplified ABI for basic functions
-const BASIC_VOTING_ABI = [
+// Complete ABI untuk VotingSystem contract
+const VOTING_SYSTEM_ABI = [
   {
     "inputs": [],
-    "name": "electionCount",
-    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "stateMutability": "view",
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "candidateId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "details",
+        "type": "string"
+      }
+    ],
+    "name": "CandidateAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "startTime",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "endTime",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      }
+    ],
+    "name": "ElectionCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "active",
+        "type": "bool"
+      }
+    ],
+    "name": "ElectionStatusChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "voter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "VoterRegistrationRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "voter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "verified",
+        "type": "bool"
+      }
+    ],
+    "name": "VoterVerified",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "candidateId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "voter",
+        "type": "address"
+      }
+    ],
+    "name": "VoteSubmitted",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_details",
+        "type": "string"
+      }
+    ],
+    "name": "addCandidate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "name": "elections",
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "candidates",
     "outputs": [
-      {"internalType": "uint256", "name": "id", "type": "uint256"},
-      {"internalType": "string", "name": "name", "type": "string"},
-      {"internalType": "string", "name": "description", "type": "string"},
-      {"internalType": "uint256", "name": "startTime", "type": "uint256"},
-      {"internalType": "uint256", "name": "endTime", "type": "uint256"},
-      {"internalType": "uint256", "name": "candidateCount", "type": "uint256"},
-      {"internalType": "uint256", "name": "totalVotes", "type": "uint256"},
-      {"internalType": "bool", "name": "active", "type": "bool"}
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "details",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "voteCount",
+        "type": "uint256"
+      }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      {"internalType": "uint256", "name": "_electionId", "type": "uint256"},
-      {"internalType": "string", "name": "_name", "type": "string"},
-      {"internalType": "string", "name": "_nik", "type": "string"}
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_candidateId",
+        "type": "uint256"
+      }
+    ],
+    "name": "castVote",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_description",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_startTime",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_endTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "createElection",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "electionCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "elections",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "startTime",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "endTime",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "candidateCount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalVotes",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_candidateId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getCandidateInfo",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getElectionCandidates",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_voter",
+        "type": "address"
+      }
+    ],
+    "name": "getVoterStatus",
+    "outputs": [
+      {
+        "internalType": "enum VotingSystem.VoterStatus",
+        "name": "",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_voter",
+        "type": "address"
+      }
+    ],
+    "name": "getUserVote",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_voter",
+        "type": "address"
+      }
+    ],
+    "name": "getUserVoteTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "isElectionActive",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nikOracle",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "_name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_nik",
+        "type": "string"
+      }
     ],
     "name": "registerVoter",
     "outputs": [],
@@ -45,13 +578,68 @@ const BASIC_VOTING_ABI = [
   },
   {
     "inputs": [
-      {"internalType": "uint256", "name": "_electionId", "type": "uint256"},
-      {"internalType": "address", "name": "_voter", "type": "address"}
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_active",
+        "type": "bool"
+      }
     ],
-    "name": "getVoterStatus",
+    "name": "setElectionStatus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_oracleAddress",
+        "type": "address"
+      }
+    ],
+    "name": "setOracleAddress",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_electionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_voter",
+        "type": "address"
+      }
+    ],
+    "name": "voterStatus",
     "outputs": [
-      {"internalType": "enum VotingSystem.VoterStatus", "name": "", "type": "uint8"},
-      {"internalType": "bool", "name": "", "type": "bool"}
+      {
+        "internalType": "enum VotingSystem.VoterStatus",
+        "name": "",
+        "type": "uint8"
+      }
     ],
     "stateMutability": "view",
     "type": "function"
@@ -126,12 +714,29 @@ const Web3Provider = ({ children }) => {
     if (!web3ToUse || !contractAddress) return;
 
     try {
+      console.log('🔄 Initializing contract with address:', contractAddress);
+      console.log('🔄 Using ABI with methods:', VOTING_SYSTEM_ABI.filter(item => item.type === 'function').map(item => item.name));
+      
       const votingContract = new web3ToUse.eth.Contract(
-        BASIC_VOTING_ABI,
+        VOTING_SYSTEM_ABI,
         contractAddress
       );
+      
       setContract(votingContract);
       console.log('✅ Contract initialized:', contractAddress);
+      console.log('📋 Available methods:', Object.keys(votingContract.methods));
+      
+      // Test contract connection
+      if (votingContract.methods.electionCount) {
+        votingContract.methods.electionCount().call()
+          .then(count => {
+            console.log('✅ Contract test successful - Election count:', count);
+          })
+          .catch(err => {
+            console.error('❌ Contract test failed:', err);
+          });
+      }
+      
     } catch (error) {
       console.error('❌ Error initializing contract:', error);
     }
@@ -217,13 +822,6 @@ const Web3Provider = ({ children }) => {
       setConnected(false);
       setContract(null);
       
-      // Clear any stored connection state
-      if (window.ethereum && window.ethereum.selectedAddress) {
-        // Note: MetaMask doesn't have a programmatic disconnect method
-        // The connection will persist in MetaMask, but our app state is cleared
-        console.log('📝 App state cleared - user can manually disconnect in MetaMask');
-      }
-      
       // Store disconnection preference to prevent auto-reconnect
       localStorage.setItem('walletDisconnected', 'true');
       
@@ -240,7 +838,6 @@ const Web3Provider = ({ children }) => {
   const handleAccountsChanged = (accounts) => {
     console.log('🔄 Accounts changed:', accounts);
     
-    // Check if user disconnected manually from MetaMask
     const wasDisconnectedManually = localStorage.getItem('walletDisconnected') === 'true';
     
     if (accounts.length === 0) {
@@ -252,12 +849,11 @@ const Web3Provider = ({ children }) => {
         toast.info('Wallet terputus dari MetaMask');
       }
     } else {
-      // Clear manual disconnect flag when accounts are available
       localStorage.removeItem('walletDisconnected');
       
       setAccounts(accounts);
       setConnected(true);
-      initializeContract(); // Re-initialize contract
+      initializeContract();
       
       if (accounts[0] !== (accounts[0] || '')) {
         toast.info('Account berubah ke: ' + accounts[0].substring(0, 8) + '...');
@@ -277,7 +873,6 @@ const Web3Provider = ({ children }) => {
       toast.warning('Network berubah. Silakan switch ke Ganache Local untuk development.');
     }
     
-    // Re-initialize contract dengan network baru
     if (connected) {
       initializeContract();
     }
@@ -333,7 +928,7 @@ const Web3Provider = ({ children }) => {
         .registerVoter(electionId, name, nik)
         .send({
           from: accounts[0],
-          gas: Math.floor(gasEstimate * 1.2) // Add 20% buffer
+          gas: Math.floor(gasEstimate * 1.2)
         });
 
       console.log('✅ Registration successful:', transaction.transactionHash);
@@ -342,7 +937,6 @@ const Web3Provider = ({ children }) => {
     } catch (error) {
       console.error('❌ Registration error:', error);
       
-      // Handle specific errors
       if (error.message.includes('revert')) {
         const revertReason = error.message.split('revert ')[1]?.split('"')[0];
         throw new Error(revertReason || 'Transaction reverted');
@@ -405,8 +999,7 @@ const Web3Provider = ({ children }) => {
   const updateContractAddress = (newAddress) => {
     setContractAddress(newAddress);
     if (web3 && connected) {
-      // Re-initialize contract dengan address baru
-      const votingContract = new web3.eth.Contract(BASIC_VOTING_ABI, newAddress);
+      const votingContract = new web3.eth.Contract(VOTING_SYSTEM_ABI, newAddress);
       setContract(votingContract);
       console.log('✅ Contract address updated:', newAddress);
     }
@@ -416,7 +1009,6 @@ const Web3Provider = ({ children }) => {
   useEffect(() => {
     initializeWeb3();
     
-    // Cleanup on unmount
     return () => {
       if (window.ethereum && window.ethereum.removeAllListeners) {
         window.ethereum.removeAllListeners();
@@ -445,7 +1037,7 @@ const Web3Provider = ({ children }) => {
     
     // Actions
     connectWallet,
-    disconnectWallet, // 🆕 New logout function
+    disconnectWallet,
     updateContractAddress,
     
     // Enhanced functions

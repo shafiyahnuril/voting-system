@@ -1,6 +1,6 @@
-// src/pages/CreateElection.js - Halaman untuk membuat pemilihan baru (Fixed)
+// src/pages/CreateElection.js - Fixed dengan timeout dan error handling yang lebih baik
 
-import React, { useState, useContext, useEffect } from 'react'; // debug
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Web3Context } from '../contexts/Web3Context.js';
 import { toast } from 'react-toastify';
@@ -8,36 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner.js';
 
 const CreateElection = () => {
   const navigate = useNavigate();
-  const { contract, accounts, connected, connectWallet, web3 } = useContext(Web3Context); // debug
-
-// Debug effect
-  useEffect(() => {
-    console.log('=== DEBUG CONTRACT INFO ===');
-    console.log('Connected:', connected);
-    console.log('Accounts:', accounts);
-    console.log('Web3:', web3);
-    console.log('Contract:', contract);
-    
-    if (contract) {
-      console.log('Contract methods:', Object.keys(contract.methods || {}));
-      console.log('Contract options:', contract.options);
-      console.log('Contract address:', contract.options?.address);
-    }
-    
-    // Test contract method existence
-    if (contract && contract.methods) {
-      console.log('createElection method exists:', typeof contract.methods.createElection === 'function');
-      console.log('electionCount method exists:', typeof contract.methods.electionCount === 'function');
-      
-      // Try to call a read-only method to test connection
-      if (contract.methods.electionCount) {
-        contract.methods.electionCount().call()
-          .then(count => console.log('Election count:', count))
-          .catch(err => console.error('Error calling electionCount:', err));
-      }
-    }
-    console.log('=== END DEBUG ===');
-  }, [contract, connected, accounts, web3]);
+  const { contract, accounts, connected, connectWallet, web3 } = useContext(Web3Context);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -54,7 +25,24 @@ const CreateElection = () => {
   });
   
   const [submitting, setSubmitting] = useState(false);
-  
+  const [transactionHash, setTransactionHash] = useState(null);
+  const [currentStep, setCurrentStep] = useState('idle'); // idle, creating, adding-candidates, completed
+
+  // Debug effect
+  useEffect(() => {
+    console.log('=== DEBUG CONTRACT INFO ===');
+    console.log('Connected:', connected);
+    console.log('Accounts:', accounts);
+    console.log('Web3:', !!web3);
+    console.log('Contract:', !!contract);
+    
+    if (contract) {
+      console.log('Contract methods:', Object.keys(contract.methods || {}));
+      console.log('Contract address:', contract.options?.address);
+      console.log('createElection method exists:', typeof contract.methods?.createElection === 'function');
+    }
+  }, [contract, connected, accounts, web3]);
+
   // Handler perubahan form
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -95,11 +83,139 @@ const CreateElection = () => {
     }
     
     const newCandidates = formData.candidates.filter((_, i) => i !== index);
-    
     setFormData(prev => ({
       ...prev,
       candidates: newCandidates
     }));
+  };
+
+  // Function untuk reset state
+  const resetSubmissionState = () => {
+    setSubmitting(false);
+    setTransactionHash(null);
+    setCurrentStep('idle');
+  };
+
+  // Function untuk create election dengan timeout
+  const createElectionWithTimeout = async (electionData) => {
+    return new Promise(async (resolve, reject) => {
+      let timeoutId;
+      let resolved = false;
+
+      // Set timeout 60 detik
+      timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error('Transaction timeout after 60 seconds'));
+        }
+      }, 60000);
+
+      try {
+        console.log('🔄 Starting createElection transaction...');
+        setCurrentStep('creating');
+
+        // Estimate gas first
+        const gasEstimate = await contract.methods
+          .createElection(
+            electionData.name,
+            electionData.description,
+            electionData.startTime,
+            electionData.endTime
+          )
+          .estimateGas({ from: accounts[0] });
+
+        console.log('⛽ Gas estimate:', gasEstimate);
+
+        // Send transaction dengan event handlers
+        contract.methods
+          .createElection(
+            electionData.name,
+            electionData.description,
+            electionData.startTime,
+            electionData.endTime
+          )
+          .send({ 
+            from: accounts[0],
+            gas: Math.floor(gasEstimate * 1.5) // 50% buffer
+          })
+          .on('transactionHash', (hash) => {
+            console.log('📤 Transaction sent:', hash);
+            setTransactionHash(hash);
+            toast.info(`Transaction sent: ${hash.substring(0, 10)}...`);
+          })
+          .on('receipt', (receipt) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeoutId);
+              console.log('✅ Transaction confirmed:', receipt);
+              resolve(receipt);
+            }
+          })
+          .on('error', (error) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeoutId);
+              console.error('❌ Transaction error:', error);
+              reject(error);
+            }
+          });
+
+      } catch (error) {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      }
+    });
+  };
+
+  // Function untuk add candidates dengan timeout
+  const addCandidatesWithTimeout = async (electionId, candidates) => {
+    setCurrentStep('adding-candidates');
+    
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      console.log(`🔄 Adding candidate ${i + 1}/${candidates.length}:`, candidate.name);
+      
+      try {
+        // Timeout per kandidat 30 detik
+        const candidatePromise = new Promise(async (resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error(`Timeout adding candidate: ${candidate.name}`));
+          }, 30000);
+
+          try {
+            const gasEstimate = await contract.methods
+              .addCandidate(electionId, candidate.name, candidate.details)
+              .estimateGas({ from: accounts[0] });
+
+            const result = await contract.methods
+              .addCandidate(electionId, candidate.name, candidate.details)
+              .send({ 
+                from: accounts[0],
+                gas: Math.floor(gasEstimate * 1.2)
+              });
+
+            clearTimeout(timeoutId);
+            resolve(result);
+          } catch (error) {
+            clearTimeout(timeoutId);
+            reject(error);
+          }
+        });
+
+        await candidatePromise;
+        console.log(`✅ Candidate ${i + 1} added successfully`);
+        
+        // Update progress
+        toast.info(`Kandidat ${i + 1}/${candidates.length} berhasil ditambahkan`);
+        
+      } catch (error) {
+        console.error(`❌ Error adding candidate ${i + 1}:`, error);
+        throw new Error(`Gagal menambahkan kandidat: ${candidate.name}`);
+      }
+    }
   };
   
   // Menangani submit form
@@ -144,88 +260,91 @@ const CreateElection = () => {
       toast.error("Waktu berakhir harus setelah waktu mulai");
       return;
     }
+
+    // Validate contract
+    if (!contract || !contract.methods?.createElection) {
+      toast.error("Contract tidak tersedia atau tidak valid. Silakan refresh halaman.");
+      console.error('Contract validation failed:', {
+        contract: !!contract,
+        methods: !!contract?.methods,
+        createElection: !!contract?.methods?.createElection
+      });
+      return;
+    }
     
     try {
       setSubmitting(true);
       
-      // Langkah 1: Membuat pemilihan baru (tanpa kandidat)
-      console.log("Creating election with parameters:", {
+      const electionData = {
         name: formData.name,
         description: formData.description,
         startTime: startTimestamp,
         endTime: endTimestamp
-      });
+      };
       
-      const createElectionTx = await contract.methods.createElection(
-        formData.name,
-        formData.description,
-        startTimestamp,
-        endTimestamp
-      ).send({ from: accounts[0] });
+      console.log('📋 Creating election with data:', electionData);
       
-      console.log("Election created:", createElectionTx);
+      // Step 1: Create election with timeout
+      const createElectionTx = await createElectionWithTimeout(electionData);
+      console.log('✅ Election created:', createElectionTx.transactionHash);
       
-      // Mendapatkan ID pemilihan yang baru dibuat
+      // Get election ID dari event atau fallback
       let electionId = null;
-      if (createElectionTx.events && createElectionTx.events.ElectionCreated) {
+      if (createElectionTx.events?.ElectionCreated) {
         electionId = createElectionTx.events.ElectionCreated.returnValues.electionId;
+        console.log('📍 Election ID from event:', electionId);
       } else {
         // Fallback: get election count
         const electionCount = await contract.methods.electionCount().call();
         electionId = electionCount;
+        console.log('📍 Election ID from count:', electionId);
       }
-      
-      console.log("Election ID:", electionId);
       
       if (!electionId) {
         throw new Error("Gagal mendapatkan ID pemilihan");
       }
       
-      // Langkah 2: Menambahkan kandidat satu per satu
-      for (let i = 0; i < formData.candidates.length; i++) {
-        const candidate = formData.candidates[i];
-        console.log(`Adding candidate ${i + 1}:`, candidate);
-        
-        try {
-          const addCandidateTx = await contract.methods.addCandidate(
-            electionId,
-            candidate.name,
-            candidate.details
-          ).send({ from: accounts[0] });
-          
-          console.log(`Candidate ${i + 1} added:`, addCandidateTx);
-        } catch (candidateError) {
-          console.error(`Error adding candidate ${i + 1}:`, candidateError);
-          throw new Error(`Gagal menambahkan kandidat ${candidate.name}`);
-        }
-      }
+      // Step 2: Add candidates with timeout
+      await addCandidatesWithTimeout(electionId, formData.candidates);
       
+      setCurrentStep('completed');
       toast.success("Pemilihan dan kandidat berhasil dibuat!");
       
       // Redirect ke halaman detail pemilihan
-      navigate(`/elections/${electionId}`);
+      setTimeout(() => {
+        navigate(`/elections/${electionId}`);
+      }, 2000);
       
     } catch (error) {
-      console.error("Error creating election:", error);
+      console.error("❌ Error creating election:", error);
+      resetSubmissionState();
       
-      // Pesan error yang lebih spesifik
-      if (error.message.includes("execution reverted")) {
-        if (error.message.includes("End time must be after start time")) {
-          toast.error("Waktu berakhir harus setelah waktu mulai");
-        } else if (error.message.includes("End time must be in the future")) {
-          toast.error("Waktu berakhir harus di masa depan");
-        } else if (error.message.includes("Ownable: caller is not the owner")) {
-          toast.error("Hanya pemilik kontrak yang dapat membuat pemilihan");
+      // Handle specific errors
+      if (error.message.includes('timeout')) {
+        toast.error("Transaksi timeout. Silakan coba lagi atau periksa koneksi Ganache.");
+      } else if (error.message.includes('User denied')) {
+        toast.error("Transaksi dibatalkan oleh pengguna");
+      } else if (error.message.includes('revert')) {
+        if (error.message.includes('Only creator')) {
+          toast.error("Hanya pembuat pemilihan yang dapat menambah kandidat");
+        } else if (error.message.includes('Invalid time')) {
+          toast.error("Waktu pemilihan tidak valid");
         } else {
           toast.error("Transaksi ditolak oleh smart contract");
         }
-      } else if (error.message.includes("User denied")) {
-        toast.error("Transaksi dibatalkan oleh pengguna");
+      } else if (error.message.includes('gas')) {
+        toast.error("Gas tidak cukup. Periksa balance atau tingkatkan gas limit.");
       } else {
         toast.error(error.message || "Gagal membuat pemilihan. Silakan coba lagi.");
       }
-    } finally {
-      setSubmitting(false);
+    }
+  };
+
+  // Function untuk cancel/reset
+  const handleCancel = () => {
+    if (submitting) {
+      resetSubmissionState();
+      toast.info("Proses pembuatan pemilihan dibatalkan");
     }
   };
   
@@ -247,9 +366,60 @@ const CreateElection = () => {
     );
   }
   
-  // Render loading state saat transaksi sedang diproses
+  // Render loading state dengan detail progress
   if (submitting) {
-    return <LoadingSpinner message="Membuat pemilihan baru..." />;
+    return (
+      <div className="max-w-2xl mx-auto py-10">
+        <div className="bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="mb-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            
+            {currentStep === 'creating' && (
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">Membuat Pemilihan...</h3>
+                <p className="text-gray-600 mb-4">Sedang memproses transaksi di blockchain</p>
+              </div>
+            )}
+            
+            {currentStep === 'adding-candidates' && (
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">Menambahkan Kandidat...</h3>
+                <p className="text-gray-600 mb-4">Menambahkan {formData.candidates.length} kandidat ke pemilihan</p>
+              </div>
+            )}
+            
+            {currentStep === 'completed' && (
+              <div>
+                <h3 className="text-xl font-bold text-green-800 mb-2">Berhasil!</h3>
+                <p className="text-gray-600 mb-4">Mengalihkan ke halaman pemilihan...</p>
+              </div>
+            )}
+          </div>
+          
+          {transactionHash && (
+            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+              <p className="text-sm text-blue-800">
+                Transaction Hash: 
+                <span className="font-mono text-xs block mt-1">
+                  {transactionHash}
+                </span>
+              </p>
+            </div>
+          )}
+          
+          <div className="text-sm text-gray-500 mb-4">
+            Proses ini mungkin membutuhkan waktu 1-2 menit...
+          </div>
+          
+          <button
+            onClick={handleCancel}
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded transition duration-300"
+          >
+            Batalkan
+          </button>
+        </div>
+      </div>
+    );
   }
   
   return (
@@ -440,11 +610,11 @@ const CreateElection = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="font-bold text-blue-800 mb-2">Informasi Penting</h3>
         <ul className="list-disc pl-5 text-blue-700">
-          <li className="mb-1">Pembuatan pemilihan akan memerlukan beberapa transaksi blockchain dan biaya gas.</li>
-          <li className="mb-1">Pertama akan dibuat pemilihan, kemudian kandidat akan ditambahkan satu per satu.</li>
-          <li className="mb-1">Setelah dibuat, detail dasar pemilihan tidak dapat diubah.</li>
-          <li className="mb-1">Anda akan menjadi admin pemilihan dan dapat mengelola pemilihan tersebut.</li>
-          <li className="mb-1">Pastikan informasi yang dimasukkan sudah benar sebelum membuat pemilihan.</li>
+          <li className="mb-1">Pembuatan pemilihan memerlukan beberapa transaksi blockchain.</li>
+          <li className="mb-1">Proses dapat memakan waktu 1-2 menit untuk selesai.</li>
+          <li className="mb-1">Jangan tutup browser selama proses berlangsung.</li>
+          <li className="mb-1">Pastikan MetaMask terhubung dan memiliki cukup ETH untuk gas.</li>
+          <li className="mb-1">Setelah dibuat, detail dasar tidak dapat diubah.</li>
         </ul>
       </div>
     </div>
