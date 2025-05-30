@@ -1,0 +1,46 @@
+{
+  "name": "blockchain-voting-backend",
+  "version": "1.0.0",
+  "description": "Backend services for blockchain voting system",
+  "main": "oracle-service.js",
+  "scripts": {
+    "start": "node oracle-service.js",
+    "dev": "nodemon oracle-service.js",
+    "setup": "node setup-development.js",
+    "compile": "truffle compile",
+    "migrate": "truffle migrate",
+    "migrate:reset": "truffle migrate --reset",
+    "test": "truffle test",
+    "ganache": "ganache-cli --host 0.0.0.0 --port 8545 --deterministic --accounts 10 --defaultBalanceEther 100",
+    "deploy:local": "npm run compile && npm run migrate:reset",
+    "full-setup": "npm run ganache & sleep 5 && npm run setup"
+  },
+  "dependencies": {
+    "web3": "^1.8.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "axios": "^1.3.4",
+    "crypto": "^1.0.1",
+    "helmet": "^6.0.1",
+    "morgan": "^1.10.0",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20",
+    "truffle": "^5.7.9",
+    "ganache-cli": "^6.12.2",
+    "@truffle/hdwallet-provider": "^2.1.5",
+    "@openzeppelin/contracts": "^4.8.1"
+  },
+  "keywords": [
+    "blockchain",
+    "voting",
+    "ethereum",
+    "smart-contracts",
+    "oracle",
+    "nik-verification"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

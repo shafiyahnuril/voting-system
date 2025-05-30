@@ -1,6 +1,6 @@
-// src/pages/CreateElection.js - Halaman untuk membuat pemilihan baru
+// src/pages/CreateElection.js - Halaman untuk membuat pemilihan baru (Fixed)
 
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react'; // debug
 import { useNavigate } from 'react-router-dom';
 import { Web3Context } from '../contexts/Web3Context.js';
 import { toast } from 'react-toastify';
@@ -8,8 +8,37 @@ import LoadingSpinner from '../components/LoadingSpinner.js';
 
 const CreateElection = () => {
   const navigate = useNavigate();
-  const { contract, accounts, connected, connectWallet } = useContext(Web3Context);
-  
+  const { contract, accounts, connected, connectWallet, web3 } = useContext(Web3Context); // debug
+
+// Debug effect
+  useEffect(() => {
+    console.log('=== DEBUG CONTRACT INFO ===');
+    console.log('Connected:', connected);
+    console.log('Accounts:', accounts);
+    console.log('Web3:', web3);
+    console.log('Contract:', contract);
+    
+    if (contract) {
+      console.log('Contract methods:', Object.keys(contract.methods || {}));
+      console.log('Contract options:', contract.options);
+      console.log('Contract address:', contract.options?.address);
+    }
+    
+    // Test contract method existence
+    if (contract && contract.methods) {
+      console.log('createElection method exists:', typeof contract.methods.createElection === 'function');
+      console.log('electionCount method exists:', typeof contract.methods.electionCount === 'function');
+      
+      // Try to call a read-only method to test connection
+      if (contract.methods.electionCount) {
+        contract.methods.electionCount().call()
+          .then(count => console.log('Election count:', count))
+          .catch(err => console.error('Error calling electionCount:', err));
+      }
+    }
+    console.log('=== END DEBUG ===');
+  }, [contract, connected, accounts, web3]);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -119,36 +148,82 @@ const CreateElection = () => {
     try {
       setSubmitting(true);
       
-      // Membuat pemilihan baru
-      const tx = await contract.methods.createElection(
+      // Langkah 1: Membuat pemilihan baru (tanpa kandidat)
+      console.log("Creating election with parameters:", {
+        name: formData.name,
+        description: formData.description,
+        startTime: startTimestamp,
+        endTime: endTimestamp
+      });
+      
+      const createElectionTx = await contract.methods.createElection(
         formData.name,
         formData.description,
         startTimestamp,
-        endTimestamp,
-        formData.candidates.map(c => c.name),
-        formData.candidates.map(c => c.details)
+        endTimestamp
       ).send({ from: accounts[0] });
       
-      console.log("Election created:", tx);
+      console.log("Election created:", createElectionTx);
       
-      // Mendapatkan ID pemilihan yang baru dibuat dari event
+      // Mendapatkan ID pemilihan yang baru dibuat
       let electionId = null;
-      if (tx.events && tx.events.ElectionCreated) {
-        electionId = tx.events.ElectionCreated.returnValues.electionId;
-      }
-      
-      toast.success("Pemilihan berhasil dibuat!");
-      
-      // Redirect ke halaman detail atau daftar pemilihan
-      if (electionId) {
-        navigate(`/elections/${electionId}`);
+      if (createElectionTx.events && createElectionTx.events.ElectionCreated) {
+        electionId = createElectionTx.events.ElectionCreated.returnValues.electionId;
       } else {
-        navigate("/elections");
+        // Fallback: get election count
+        const electionCount = await contract.methods.electionCount().call();
+        electionId = electionCount;
       }
+      
+      console.log("Election ID:", electionId);
+      
+      if (!electionId) {
+        throw new Error("Gagal mendapatkan ID pemilihan");
+      }
+      
+      // Langkah 2: Menambahkan kandidat satu per satu
+      for (let i = 0; i < formData.candidates.length; i++) {
+        const candidate = formData.candidates[i];
+        console.log(`Adding candidate ${i + 1}:`, candidate);
+        
+        try {
+          const addCandidateTx = await contract.methods.addCandidate(
+            electionId,
+            candidate.name,
+            candidate.details
+          ).send({ from: accounts[0] });
+          
+          console.log(`Candidate ${i + 1} added:`, addCandidateTx);
+        } catch (candidateError) {
+          console.error(`Error adding candidate ${i + 1}:`, candidateError);
+          throw new Error(`Gagal menambahkan kandidat ${candidate.name}`);
+        }
+      }
+      
+      toast.success("Pemilihan dan kandidat berhasil dibuat!");
+      
+      // Redirect ke halaman detail pemilihan
+      navigate(`/elections/${electionId}`);
       
     } catch (error) {
       console.error("Error creating election:", error);
-      toast.error("Gagal membuat pemilihan. Silakan coba lagi.");
+      
+      // Pesan error yang lebih spesifik
+      if (error.message.includes("execution reverted")) {
+        if (error.message.includes("End time must be after start time")) {
+          toast.error("Waktu berakhir harus setelah waktu mulai");
+        } else if (error.message.includes("End time must be in the future")) {
+          toast.error("Waktu berakhir harus di masa depan");
+        } else if (error.message.includes("Ownable: caller is not the owner")) {
+          toast.error("Hanya pemilik kontrak yang dapat membuat pemilihan");
+        } else {
+          toast.error("Transaksi ditolak oleh smart contract");
+        }
+      } else if (error.message.includes("User denied")) {
+        toast.error("Transaksi dibatalkan oleh pengguna");
+      } else {
+        toast.error(error.message || "Gagal membuat pemilihan. Silakan coba lagi.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -365,7 +440,8 @@ const CreateElection = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="font-bold text-blue-800 mb-2">Informasi Penting</h3>
         <ul className="list-disc pl-5 text-blue-700">
-          <li className="mb-1">Pembuatan pemilihan akan memerlukan transaksi blockchain dan biaya gas.</li>
+          <li className="mb-1">Pembuatan pemilihan akan memerlukan beberapa transaksi blockchain dan biaya gas.</li>
+          <li className="mb-1">Pertama akan dibuat pemilihan, kemudian kandidat akan ditambahkan satu per satu.</li>
           <li className="mb-1">Setelah dibuat, detail dasar pemilihan tidak dapat diubah.</li>
           <li className="mb-1">Anda akan menjadi admin pemilihan dan dapat mengelola pemilihan tersebut.</li>
           <li className="mb-1">Pastikan informasi yang dimasukkan sudah benar sebelum membuat pemilihan.</li>
