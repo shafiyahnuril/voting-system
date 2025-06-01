@@ -1,4 +1,4 @@
-// src/contexts/Web3Context.js - Fixed dengan ABI lengkap
+// src/contexts/Web3Context.js - Fixed dengan ABI lengkap dan contract address detection
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
@@ -646,8 +646,16 @@ const VOTING_SYSTEM_ABI = [
   }
 ];
 
-// Get contract address from environment
-const CONTRACT_ADDRESS = process.env.REACT_APP_VOTING_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+// Function untuk mendapatkan contract address - dipindah ke dalam function
+function getContractAddress() {
+  // 1. From environment variable
+  if (process.env.REACT_APP_VOTING_CONTRACT_ADDRESS) {
+    return process.env.REACT_APP_VOTING_CONTRACT_ADDRESS;
+  }
+  
+  // 2. Default fallback untuk Ganache
+  return '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+}
 
 const Web3Context = createContext(null);
 
@@ -659,7 +667,7 @@ const Web3Provider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [chainId, setChainId] = useState(null);
   const [networkName, setNetworkName] = useState('');
-  const [contractAddress, setContractAddress] = useState(CONTRACT_ADDRESS);
+  const [contractAddress, setContractAddress] = useState('');
 
   // Initialize Web3 (tanpa auto-connect)
   const initializeWeb3 = useCallback(async () => {
@@ -674,6 +682,11 @@ const Web3Provider = ({ children }) => {
       const web3Instance = new Web3(window.ethereum);
       setWeb3(web3Instance);
       console.log('✅ Web3 initialized');
+
+      // Get contract address
+      const address = getContractAddress();
+      setContractAddress(address);
+      console.log('📍 Contract address:', address);
 
       // Get network info
       try {
@@ -694,7 +707,7 @@ const Web3Provider = ({ children }) => {
           console.log('✅ Already connected:', accs[0]);
           
           // Initialize contract jika sudah connected
-          initializeContract(web3Instance);
+          initializeContract(web3Instance, address);
         }
       } catch (error) {
         console.warn('⚠️ Could not check existing connection:', error);
@@ -709,24 +722,38 @@ const Web3Provider = ({ children }) => {
   }, []);
 
   // Initialize contract
-  const initializeContract = (web3Instance = null) => {
+  const initializeContract = (web3Instance = null, address = null) => {
     const web3ToUse = web3Instance || web3;
-    if (!web3ToUse || !contractAddress) return;
+    const addressToUse = address || contractAddress;
+    
+    if (!web3ToUse || !addressToUse) {
+      console.error('❌ Cannot initialize contract: missing web3 or contract address');
+      return;
+    }
 
     try {
-      console.log('🔄 Initializing contract with address:', contractAddress);
-      console.log('🔄 Using ABI with methods:', VOTING_SYSTEM_ABI.filter(item => item.type === 'function').map(item => item.name));
+      console.log('🔄 Initializing contract with address:', addressToUse);
+      
+      // Test if contract exists at address
+      web3ToUse.eth.getCode(addressToUse)
+        .then(code => {
+          if (code === '0x' || code === '0x0') {
+            console.error('❌ No contract found at address:', addressToUse);
+            toast.error('Contract not deployed. Please run: truffle migrate --reset');
+            return;
+          }
+          console.log('✅ Contract code found at address');
+        });
       
       const votingContract = new web3ToUse.eth.Contract(
         VOTING_SYSTEM_ABI,
-        contractAddress
+        addressToUse
       );
       
       setContract(votingContract);
-      console.log('✅ Contract initialized:', contractAddress);
-      console.log('📋 Available methods:', Object.keys(votingContract.methods));
+      console.log('✅ Contract initialized successfully');
       
-      // Test contract connection
+      // Test contract methods
       if (votingContract.methods.electionCount) {
         votingContract.methods.electionCount().call()
           .then(count => {

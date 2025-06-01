@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-// Ultra Simple Voting System - No external dependencies in constructor
+// Ultra Simple Voting System - Compatible dengan Truffle deployment
 contract VotingSystem {
     
     // Simple owner management
@@ -84,9 +84,12 @@ contract VotingSystem {
     event VoteSubmitted(uint256 indexed electionId, uint256 indexed candidateId, address indexed voter);
     event ElectionStatusChanged(uint256 indexed electionId, bool active);
 
-    // Minimal constructor - no parameters
+    // Fixed constructor - no parameters, simple initialization
     constructor() {
         owner = msg.sender;
+        electionCount = 0;
+        candidateCount = 0;
+        locked = false;
         emit OwnershipTransferred(address(0), msg.sender);
     }
 
@@ -116,17 +119,16 @@ contract VotingSystem {
         electionCount++;
         uint256 electionId = electionCount;
 
-        elections[electionId] = Election({
-            id: electionId,
-            name: _name,
-            description: _description,
-            startTime: _startTime,
-            endTime: _endTime,
-            candidateCount: 0,
-            totalVotes: 0,
-            active: true,
-            creator: msg.sender
-        });
+        Election storage newElection = elections[electionId];
+        newElection.id = electionId;
+        newElection.name = _name;
+        newElection.description = _description;
+        newElection.startTime = _startTime;
+        newElection.endTime = _endTime;
+        newElection.candidateCount = 0;
+        newElection.totalVotes = 0;
+        newElection.active = true;
+        newElection.creator = msg.sender;
 
         emit ElectionCreated(electionId, _name, _startTime, _endTime, msg.sender);
         return electionId;
@@ -146,13 +148,12 @@ contract VotingSystem {
         candidateCount++;
         uint256 candidateId = candidateCount;
 
-        candidates[candidateId] = Candidate({
-            id: candidateId,
-            electionId: _electionId,
-            name: _name,
-            details: _details,
-            voteCount: 0
-        });
+        Candidate storage newCandidate = candidates[candidateId];
+        newCandidate.id = candidateId;
+        newCandidate.electionId = _electionId;
+        newCandidate.name = _name;
+        newCandidate.details = _details;
+        newCandidate.voteCount = 0;
 
         elections[_electionId].candidateCount++;
         electionCandidates[_electionId].push(candidateId);
@@ -178,26 +179,44 @@ contract VotingSystem {
         }
 
         // Create NIK hash
-        string memory nikHash = string(abi.encodePacked(keccak256(abi.encodePacked(_nik, msg.sender))));
+        string memory nikHash = _createNIKHash(_nik, msg.sender);
         require(!usedNIKHashes[nikHash], "NIK already used");
 
         usedNIKHashes[nikHash] = true;
 
         // Create request ID
-        bytes32 requestId = keccak256(abi.encodePacked(msg.sender, _nik, block.timestamp));
+        bytes32 requestId = keccak256(abi.encodePacked(msg.sender, _nik, block.timestamp, block.number));
 
         // Auto-verify for demo (skip Oracle)
-        electionVoters[_electionId][msg.sender] = Voter({
-            name: _name,
-            nikHash: nikHash,
-            status: VoterStatus.Registered, // Skip verification step
-            votedFor: 0,
-            timestamp: 0,
-            nikVerified: true
-        });
+        Voter storage newVoter = electionVoters[_electionId][msg.sender];
+        newVoter.name = _name;
+        newVoter.nikHash = nikHash;
+        newVoter.status = VoterStatus.Registered; // Skip verification step
+        newVoter.votedFor = 0;
+        newVoter.timestamp = 0;
+        newVoter.nikVerified = true;
 
         emit VoterRegistrationRequested(_electionId, msg.sender, requestId);
         emit VoterVerified(_electionId, msg.sender, true);
+    }
+
+    // Helper function to create NIK hash
+    function _createNIKHash(string memory _nik, address _sender) private pure returns (string memory) {
+        bytes32 hash = keccak256(abi.encodePacked(_nik, _sender));
+        return _bytes32ToString(hash);
+    }
+
+    // Helper function to convert bytes32 to string
+    function _bytes32ToString(bytes32 _bytes32) private pure returns (string memory) {
+        uint8 i = 0;
+        while(i < 32 && _bytes32[i] != 0) {
+            i++;
+        }
+        bytes memory bytesArray = new bytes(i);
+        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
+            bytesArray[i] = _bytes32[i];
+        }
+        return string(bytesArray);
     }
 
     // Cast vote

@@ -1,0 +1,37 @@
+const VotingSystem = artifacts.require("VotingSystem");
+
+module.exports = async function(deployer, network, accounts) {
+  console.log("🚀 Deploying VotingSystem only...");
+  console.log("Network:", network);
+  console.log("Deployer:", accounts[0]);
+  
+  try {
+    // Deploy VotingSystem
+    await deployer.deploy(VotingSystem);
+    const voting = await VotingSystem.deployed();
+    console.log("✅ VotingSystem deployed at:", voting.address);
+    
+    // Verify basic functionality
+    const owner = await voting.owner();
+    const electionCount = await voting.electionCount();
+    console.log("✅ Owner:", owner);
+    console.log("✅ Election count:", electionCount.toString());
+    
+    // Update .env
+    const fs = require('fs');
+    const envContent = `REACT_APP_VOTING_CONTRACT_ADDRESS=${voting.address}
+REACT_APP_RPC_URL=http://localhost:8545
+REACT_APP_CHAIN_ID=5777
+REACT_APP_NETWORK_NAME=Ganache Local
+`;
+    fs.writeFileSync('.env', envContent);
+    console.log("✅ .env updated");
+    
+    console.log("\n🎉 DEPLOYMENT SUCCESS!");
+    console.log("Contract Address:", voting.address);
+    
+  } catch (error) {
+    console.error("❌ Deployment failed:", error.message);
+    throw error;
+  }
+};

@@ -8,41 +8,43 @@ module.exports = async function(deployer, network, accounts) {
   console.log("Available accounts:", accounts.slice(0, 3));
   
   try {
-    // 1. Deploy Oracle first (no constructor params)
-    console.log("🔮 Deploying NIKVerificationOracle...");
-    await deployer.deploy(NIKVerificationOracle);
-    const oracle = await NIKVerificationOracle.deployed();
-    console.log("✅ Oracle deployed at:", oracle.address);
+    // Check network connection first using global web3
+    const blockNumber = await web3.eth.getBlockNumber();
+    console.log("✅ Network connected. Latest block:", blockNumber);
     
-    // 2. Deploy VotingSystem (no constructor params)
+    // 1. Deploy VotingSystem first (no constructor params)
     console.log("🗳️ Deploying VotingSystem...");
-    await deployer.deploy(VotingSystem);
+    
+    // Simple deployment without complex options
+    await deployer.deploy(VotingSystem, { gas: 6000000 });
     const voting = await VotingSystem.deployed();
     console.log("✅ VotingSystem deployed at:", voting.address);
     
-    // 3. Verify contract deployment by calling basic functions
+    // 2. Deploy Oracle (if needed)
+    console.log("🔮 Deploying NIKVerificationOracle...");
+    try {
+      await deployer.deploy(NIKVerificationOracle, { gas: 3000000 });
+      const oracle = await NIKVerificationOracle.deployed();
+      console.log("✅ Oracle deployed at:", oracle.address);
+      
+      // 3. Link Oracle to VotingSystem
+      console.log("🔗 Linking Oracle to VotingSystem...");
+      await voting.setOracleAddress(oracle.address);
+      console.log("✅ Oracle linked successfully");
+    } catch (oracleError) {
+      console.warn("⚠️ Oracle deployment failed, continuing without it:", oracleError.message);
+    }
+    
+    // 4. Verify contract deployment by calling basic functions
     console.log("🔍 Verifying contract deployment...");
     try {
       const owner = await voting.owner();
       const electionCount = await voting.electionCount();
       console.log("✅ Contract owner:", owner);
       console.log("✅ Initial election count:", electionCount.toString());
-      
-      // Verify Oracle
-      const oracleOwner = await oracle.owner();
-      console.log("✅ Oracle owner:", oracleOwner);
     } catch (verifyError) {
       console.error("❌ Contract verification failed:", verifyError);
       throw verifyError;
-    }
-    
-    // 4. Link Oracle to VotingSystem
-    console.log("🔗 Linking Oracle to VotingSystem...");
-    try {
-      await voting.setOracleAddress(oracle.address);
-      console.log("✅ Oracle linked successfully");
-    } catch (linkError) {
-      console.warn("⚠️ Could not link Oracle (may not be required):", linkError.message);
     }
     
     // 5. Setup for development
@@ -50,11 +52,6 @@ module.exports = async function(deployer, network, accounts) {
       console.log("⚙️ Setting up development environment...");
       
       try {
-        // Authorize oracle node
-        console.log("🔑 Authorizing oracle node...");
-        await oracle.authorizeNode(accounts[1]);
-        console.log("✅ Oracle node authorized:", accounts[1]);
-        
         // Create sample election
         const now = Math.floor(Date.now() / 1000);
         const startTime = now + 300; // Start in 5 minutes
@@ -68,16 +65,17 @@ module.exports = async function(deployer, network, accounts) {
           "Pemilihan Demonstrasi 2024",
           "Pemilihan contoh untuk testing dan demonstrasi sistem voting blockchain",
           startTime,
-          endTime
+          endTime,
+          { from: accounts[0] }
         );
         
         console.log("✅ Sample election created, transaction:", createTx.tx);
         
         // Add sample candidates
         console.log("👥 Adding sample candidates...");
-        await voting.addCandidate(1, "Kandidat Alpha", "Visi: Transparansi dan inovasi teknologi untuk kemajuan bersama");
-        await voting.addCandidate(1, "Kandidat Beta", "Visi: Pemberdayaan masyarakat melalui partisipasi aktif dan kolaboratif");
-        await voting.addCandidate(1, "Kandidat Gamma", "Visi: Sustainable development dan good governance untuk masa depan");
+        await voting.addCandidate(1, "Kandidat Alpha", "Visi: Transparansi dan inovasi teknologi untuk kemajuan bersama", { from: accounts[0] });
+        await voting.addCandidate(1, "Kandidat Beta", "Visi: Pemberdayaan masyarakat melalui partisipasi aktif dan kolaboratif", { from: accounts[0] });
+        await voting.addCandidate(1, "Kandidat Gamma", "Visi: Sustainable development dan good governance untuk masa depan", { from: accounts[0] });
         
         console.log("✅ Sample candidates added successfully");
         
@@ -91,40 +89,23 @@ module.exports = async function(deployer, network, accounts) {
       }
     }
     
-    // 6. Save deployment info
-    console.log("💾 Saving deployment information...");
-    const deploymentInfo = {
-      network: network,
-      timestamp: new Date().toISOString(),
-      contracts: {
-        VotingSystem: {
-          address: voting.address,
-          owner: await voting.owner()
-        },
-        NIKVerificationOracle: {
-          address: oracle.address,
-          owner: await oracle.owner()
-        }
-      },
-      accounts: accounts.slice(0, 5),
-      gasUsed: {
-        VotingSystem: voting.constructor.class_defaults.gas,
-        Oracle: oracle.constructor.class_defaults.gas
-      }
-    };
-    
-    const fs = require('fs');
-    const deploymentFile = `./deployment-${network}-${Date.now()}.json`;
-    fs.writeFileSync(deploymentFile, JSON.stringify(deploymentInfo, null, 2));
-    console.log("✅ Deployment info saved to:", deploymentFile);
-    
-    // 7. Update environment files
+    // 6. Update environment files
     console.log("🔧 Updating environment files...");
     
+    // Get oracle address (it should be defined from earlier in the script)
+    let oracleAddress = '';
+    try {
+      const oracle = await NIKVerificationOracle.deployed();
+      oracleAddress = oracle.address;
+    } catch (err) {
+      console.warn('⚠️ Could not get oracle address');
+    }
+
     // Frontend .env
+    const fs = require('fs');
     const frontendEnv = `# Generated on ${new Date().toISOString()}
 REACT_APP_VOTING_CONTRACT_ADDRESS=${voting.address}
-REACT_APP_ORACLE_CONTRACT_ADDRESS=${oracle.address}
+REACT_APP_ORACLE_CONTRACT_ADDRESS=${oracleAddress}
 REACT_APP_RPC_URL=http://localhost:8545
 REACT_APP_CHAIN_ID=5777
 REACT_APP_NETWORK_NAME=Ganache Local
@@ -137,7 +118,7 @@ REACT_APP_NETWORK_NAME=Ganache Local
     if (fs.existsSync('./backend')) {
       const backendEnv = `# Generated on ${new Date().toISOString()}
 VOTING_CONTRACT_ADDRESS=${voting.address}
-ORACLE_CONTRACT_ADDRESS=${oracle.address}
+ORACLE_CONTRACT_ADDRESS=${oracleAddress}
 RPC_URL=http://localhost:8545
 NETWORK_ID=5777
 ORACLE_PRIVATE_KEY=${process.env.ORACLE_PRIVATE_KEY || '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1'}
@@ -149,44 +130,22 @@ DEBUG=true
       console.log("✅ Backend .env updated");
     }
     
-    // 8. Final verification
-    console.log("🔍 Final contract verification...");
-    try {
-      // Test VotingSystem methods
-      const testElectionCount = await voting.electionCount();
-      console.log("✅ VotingSystem.electionCount():", testElectionCount.toString());
-      
-      // Test Oracle methods
-      const testOracleOwner = await oracle.owner();
-      console.log("✅ Oracle.owner():", testOracleOwner);
-      
-      // Test if methods exist
-      console.log("✅ VotingSystem methods available:", [
-        'createElection' in voting.methods,
-        'addCandidate' in voting.methods,
-        'registerVoter' in voting.methods,
-        'castVote' in voting.methods
-      ]);
-      
-    } catch (testError) {
-      console.error("❌ Final verification failed:", testError);
-    }
-    
     console.log("\n🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!");
     console.log("=" * 50);
     console.log("📋 Contract Addresses:");
     console.log("   VotingSystem:", voting.address);
-    console.log("   Oracle:", oracle.address);
+    if (oracle) {
+      console.log("   Oracle:", oracle.address);
+    }
     console.log("\n🚀 Next Steps:");
     console.log("1. Start frontend: npm start");
     console.log("2. Connect MetaMask to http://localhost:8545");
     console.log("3. Import account:", accounts[0]);
-    console.log("4. (Optional) Start oracle service: cd backend && npm start");
     console.log("=" * 50);
     
     return {
       votingSystem: voting.address,
-      oracle: oracle.address
+      oracle: oracle ? oracle.address : null
     };
     
   } catch (error) {
@@ -206,6 +165,13 @@ DEBUG=true
       console.error("💡 Out of gas error. Try:");
       console.error("   - Increasing gas limit in truffle-config.js");
       console.error("   - Simplifying contract logic");
+    }
+    
+    if (error.message.includes('invalid opcode')) {
+      console.error("💡 Invalid opcode error. Try:");
+      console.error("   - Check Solidity version compatibility");
+      console.error("   - Verify constructor doesn't have issues");
+      console.error("   - Check for array out of bounds access");
     }
     
     throw error;
