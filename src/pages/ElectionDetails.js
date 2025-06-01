@@ -1,4 +1,4 @@
-// src/pages/ElectionDetails.js - Halaman untuk melihat detail pemilihan dan memberikan suara
+// src/pages/ElectionDetails.js - Fixed dengan voter status checking yang benar
 
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -14,9 +14,11 @@ const ElectionDetails = () => {
   const [election, setElection] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [votingStatus, setVotingStatus] = useState(null); // null, 'not-registered', 'registered', 'voted'
+  const [votingStatus, setVotingStatus] = useState(null);
+  const [voterVerified, setVoterVerified] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [votingInProgress, setVotingInProgress] = useState(false);
+  const [debugInfo, setDebugInfo] = useState({});
   
   useEffect(() => {
     if (contract && connected) {
@@ -29,60 +31,160 @@ const ElectionDetails = () => {
   const fetchElectionDetails = async () => {
     try {
       setLoading(true);
-      // Dapatkan detail pemilihan
+      console.log('🔄 Fetching election details for ID:', id);
+      
+      // Get election data
       const electionData = await contract.methods.elections(id).call();
+      console.log('📊 Raw election data:', electionData);
       
-      // Dapatkan status pemilihan aktif atau tidak
+      // Get election active status
       const isActive = await contract.methods.isElectionActive(id).call();
+      console.log('📊 Election active status:', isActive);
       
-      // Format data pemilihan
+      // Format election data
       const currentTime = Math.floor(Date.now() / 1000);
+      const startTime = parseInt(electionData.startTime || electionData[3]);
+      const endTime = parseInt(electionData.endTime || electionData[4]);
+      
       const formattedElection = {
-        id: electionData.id,
-        name: electionData.name,
-        description: electionData.description,
-        startTime: new Date(parseInt(electionData.startTime) * 1000),
-        endTime: new Date(parseInt(electionData.endTime) * 1000),
+        id: electionData.id || electionData[0],
+        name: electionData.name || electionData[1],
+        description: electionData.description || electionData[2],
+        startTime: new Date(startTime * 1000),
+        endTime: new Date(endTime * 1000),
         isActive: isActive,
-        totalVotes: electionData.totalVotes,
-        status: determineStatus(currentTime, electionData.startTime, electionData.endTime, isActive)
+        totalVotes: electionData.totalVotes || electionData[6],
+        status: determineStatus(currentTime, startTime, endTime, isActive)
       };
       
       setElection(formattedElection);
+      console.log('✅ Formatted election:', formattedElection);
       
-      // Dapatkan status voter
-      const voterStatus = await contract.methods.voterStatus(id, accounts[0]).call();
+      // Get voter status with enhanced checking
+      await checkVoterStatus();
       
-      // VoterStatus enum: NotRegistered = 0, Registered = 1, Voted = 2
-      if (voterStatus === '0') {
-        setVotingStatus('not-registered');
-      } else if (voterStatus === '1') {
-        setVotingStatus('registered');
-      } else if (voterStatus === '2') {
-        setVotingStatus('voted');
+      // Get candidates
+      await fetchCandidates();
+      
+    } catch (error) {
+      console.error("❌ Error fetching election details:", error);
+      toast.error("Gagal memuat detail pemilihan: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const checkVoterStatus = async () => {
+    try {
+      console.log('🔄 Checking voter status...');
+      
+      let status = '0'; // Default: Not Registered
+      let verified = false;
+      
+      // Try enhanced getVoterStatus method first
+      try {
+        const statusResult = await contract.methods.getVoterStatus(id, accounts[0]).call();
+        status = statusResult[0] || statusResult;
+        verified = statusResult[1] !== false; // Default to true if not explicitly false
+        console.log('✅ getVoterStatus result:', { status, verified });
+      } catch (error) {
+        console.log('⚠️ getVoterStatus not available, trying fallback...');
+        
+        // Fallback to basic voterStatus method
+        try {
+          status = await contract.methods.voterStatus(id, accounts[0]).call();
+          verified = status !== '0'; // If registered, assume verified in simplified contract
+          console.log('✅ voterStatus fallback result:', { status, verified });
+        } catch (error2) {
+          console.warn('⚠️ Could not get voter status:', error2.message);
+          status = '0';
+          verified = false;
+        }
       }
       
-      // Dapatkan daftar kandidat
-      const candidateIds = await contract.methods.getElectionCandidates(id).call();
+      // Convert status to meaningful state
+      let votingState = null;
+      switch (status) {
+        case '0':
+          votingState = 'not-registered';
+          break;
+        case '1':
+          votingState = verified ? 'registered' : 'pending-verification';
+          break;
+        case '2':
+          votingState = 'registered'; // In new contract, this is verified
+          break;
+        case '3':
+          votingState = 'voted';
+          break;
+        default:
+          votingState = 'unknown';
+      }
       
+      setVotingStatus(votingState);
+      setVoterVerified(verified);
+      
+      // Store debug info
+      setDebugInfo({
+        rawStatus: status,
+        verified: verified,
+        votingState: votingState,
+        account: accounts[0]
+      });
+      
+      console.log('📋 Final voter status:', {
+        rawStatus: status,
+        votingState,
+        verified,
+        account: accounts[0]
+      });
+      
+    } catch (error) {
+      console.error('❌ Error checking voter status:', error);
+      setVotingStatus('error');
+      setVoterVerified(false);
+    }
+  };
+  
+  const fetchCandidates = async () => {
+    try {
+      console.log('🔄 Fetching candidates...');
+      
+      // Get candidate IDs
+      const candidateIds = await contract.methods.getElectionCandidates(id).call();
+      console.log('📊 Candidate IDs:', candidateIds);
+      
+      if (candidateIds.length === 0) {
+        console.log('📭 No candidates found');
+        setCandidates([]);
+        return;
+      }
+      
+      // Get candidate details
       const candidatePromises = candidateIds.map(async (candidateId) => {
-        const candidateInfo = await contract.methods.getCandidateInfo(candidateId).call();
-        return {
-          id: candidateInfo[0],
-          name: candidateInfo[1],
-          details: candidateInfo[2],
-          voteCount: candidateInfo[3]
-        };
+        try {
+          const candidateInfo = await contract.methods.getCandidateInfo(candidateId).call();
+          return {
+            id: candidateInfo[0],
+            name: candidateInfo[1],
+            details: candidateInfo[2],
+            voteCount: candidateInfo[3]
+          };
+        } catch (error) {
+          console.warn(`⚠️ Error getting candidate ${candidateId}:`, error.message);
+          return null;
+        }
       });
       
       const candidateResults = await Promise.all(candidatePromises);
-      setCandidates(candidateResults);
+      const validCandidates = candidateResults.filter(c => c !== null);
+      
+      setCandidates(validCandidates);
+      console.log('✅ Candidates loaded:', validCandidates);
       
     } catch (error) {
-      console.error("Error fetching election details:", error);
-      toast.error("Gagal memuat detail pemilihan");
-    } finally {
-      setLoading(false);
+      console.error('❌ Error fetching candidates:', error);
+      setCandidates([]);
     }
   };
   
@@ -106,20 +208,88 @@ const ElectionDetails = () => {
     
     try {
       setVotingInProgress(true);
+      console.log('🗳️ Attempting to cast vote...', {
+        electionId: id,
+        candidateId: selectedCandidate,
+        voter: accounts[0],
+        voterStatus: votingStatus,
+        verified: voterVerified
+      });
       
-      // Memanggil fungsi castVote pada smart contract
-      await contract.methods.castVote(id, selectedCandidate)
-        .send({ from: accounts[0] });
+      // Pre-flight checks
+      const currentTime = Math.floor(Date.now() / 1000);
+      const startTime = Math.floor(election.startTime.getTime() / 1000);
+      const endTime = Math.floor(election.endTime.getTime() / 1000);
       
+      const checks = {
+        withinTimeWindow: currentTime >= startTime && currentTime <= endTime,
+        electionActive: election.isActive,
+        voterRegistered: votingStatus === 'registered',
+        voterVerified: voterVerified,
+        hasNotVoted: votingStatus !== 'voted',
+        validCandidate: candidates.some(c => c.id == selectedCandidate)
+      };
+      
+      console.log('📋 Pre-flight checks:', checks);
+      
+      const failedChecks = Object.entries(checks).filter(([key, value]) => !value);
+      if (failedChecks.length > 0) {
+        const failures = failedChecks.map(([key]) => key).join(', ');
+        throw new Error(`Vote validation failed: ${failures}`);
+      }
+      
+      // Estimate gas
+      const gasEstimate = await contract.methods
+        .castVote(id, selectedCandidate)
+        .estimateGas({ from: accounts[0] });
+      
+      console.log('⛽ Gas estimate:', gasEstimate);
+      
+      // Send transaction
+      const result = await contract.methods
+        .castVote(id, selectedCandidate)
+        .send({ 
+          from: accounts[0],
+          gas: Math.floor(gasEstimate * 1.5) // 50% buffer
+        });
+      
+      console.log('✅ Vote cast successfully:', result);
       toast.success("Suara berhasil diberikan!");
+      
+      // Update status
       setVotingStatus('voted');
       
       // Refresh data
       await fetchElectionDetails();
       
     } catch (error) {
-      console.error("Error casting vote:", error);
-      toast.error("Gagal memberikan suara. Silakan coba lagi.");
+      console.error("❌ Error casting vote:", error);
+      
+      let errorMessage = "Gagal memberikan suara: ";
+      
+      if (error.message.includes('Not registered')) {
+        errorMessage = "Anda belum terdaftar untuk pemilihan ini";
+      } else if (error.message.includes('Not verified')) {
+        errorMessage = "Identitas Anda belum terverifikasi";
+      } else if (error.message.includes('Already voted')) {
+        errorMessage = "Anda sudah memberikan suara";
+      } else if (error.message.includes('Election not active')) {
+        errorMessage = "Pemilihan tidak aktif";
+      } else if (error.message.includes('Not started')) {
+        errorMessage = "Pemilihan belum dimulai";
+      } else if (error.message.includes('Ended')) {
+        errorMessage = "Pemilihan sudah berakhir";
+      } else if (error.message.includes('Invalid candidate')) {
+        errorMessage = "Kandidat tidak valid";
+      } else if (error.message.includes('User denied')) {
+        errorMessage = "Transaksi dibatalkan";
+      } else if (error.message.includes('validation failed')) {
+        errorMessage = error.message;
+      } else {
+        errorMessage += error.message || "Terjadi kesalahan tidak dikenal";
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setVotingInProgress(false);
     }
@@ -150,6 +320,42 @@ const ElectionDetails = () => {
       default:
         return null;
     }
+  };
+
+  // Helper untuk mendapatkan status text yang user-friendly
+  const getVoterStatusText = (status, verified) => {
+    switch (status) {
+      case 'not-registered':
+        return { text: "Belum terdaftar", color: "text-red-600", bg: "bg-red-50" };
+      case 'pending-verification':
+        return { text: "Menunggu verifikasi", color: "text-yellow-600", bg: "bg-yellow-50" };
+      case 'registered':
+        return verified 
+          ? { text: "Terdaftar & Terverifikasi", color: "text-green-600", bg: "bg-green-50" }
+          : { text: "Terdaftar, menunggu verifikasi", color: "text-yellow-600", bg: "bg-yellow-50" };
+      case 'voted':
+        return { text: "Sudah memberikan suara", color: "text-purple-600", bg: "bg-purple-50" };
+      case 'error':
+        return { text: "Error mengecek status", color: "text-red-600", bg: "bg-red-50" };
+      default:
+        return { text: "Status tidak dikenal", color: "text-gray-600", bg: "bg-gray-50" };
+    }
+  };
+
+  // Check if user can vote
+  const canUserVote = () => {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = election ? Math.floor(election.startTime.getTime() / 1000) : 0;
+    const endTime = election ? Math.floor(election.endTime.getTime() / 1000) : 0;
+    
+    return (
+      votingStatus === 'registered' &&
+      voterVerified &&
+      election?.status === 'active' &&
+      currentTime >= startTime &&
+      currentTime <= endTime &&
+      candidates.length > 0
+    );
   };
 
   // Render loading state
@@ -184,6 +390,9 @@ const ElectionDetails = () => {
     );
   }
 
+  const voterStatusInfo = getVoterStatusText(votingStatus, voterVerified);
+  const canVote = canUserVote();
+
   return (
     <div>
       {/* Header Section */}
@@ -216,43 +425,64 @@ const ElectionDetails = () => {
           </div>
         </div>
         
-        {/* Voter Status */}
-        <div className="mt-4 p-4 rounded-lg bg-gray-50">
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Status Anda</h3>
-          
-          {votingStatus === 'not-registered' && (
-            <div className="flex items-center justify-between">
-              <p className="text-gray-700">
-                Anda belum terdaftar untuk pemilihan ini.
+        {/* Enhanced Voter Status */}
+        <div className={`mt-4 p-4 rounded-lg ${voterStatusInfo.bg}`}>
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Status Anda</h3>
+              <p className={`font-medium ${voterStatusInfo.color}`}>
+                {voterStatusInfo.text}
               </p>
-              <Link
-                to={`/register?election=${id}`}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300"
-              >
-                Daftar Sekarang
-              </Link>
+              
+              {/* Debug Info (only in development) */}
+              {process.env.NODE_ENV === 'development' && (
+                <details className="mt-2 text-sm text-gray-500">
+                  <summary className="cursor-pointer">Debug Info</summary>
+                  <pre className="mt-2 bg-gray-100 p-2 rounded text-xs">
+                    {JSON.stringify(debugInfo, null, 2)}
+                  </pre>
+                </details>
+              )}
             </div>
-          )}
+            
+            {/* Action Buttons based on Status */}
+            <div className="flex flex-col gap-2">
+              {votingStatus === 'not-registered' && (
+                <Link
+                  to={`/register?election=${id}`}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300 text-center"
+                >
+                  Daftar Sekarang
+                </Link>
+              )}
+              
+              {votingStatus === 'voted' && election.status === 'ended' && (
+                <Link
+                  to={`/results/${id}`}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-300 text-center"
+                >
+                  Lihat Hasil
+                </Link>
+              )}
+            </div>
+          </div>
           
-          {votingStatus === 'registered' && election.status === 'active' && (
-            <p className="text-green-700">
-              Anda terdaftar dan dapat memberikan suara pada pemilihan ini.
-            </p>
-          )}
-          
-          {votingStatus === 'registered' && election.status !== 'active' && (
-            <p className="text-yellow-700">
-              Anda terdaftar untuk pemilihan ini, tetapi pemilihan {
-                election.status === 'upcoming' ? 'belum dimulai' : 
-                election.status === 'ended' ? 'sudah berakhir' : 'sedang dijeda'
-              }.
-            </p>
-          )}
-          
-          {votingStatus === 'voted' && (
-            <p className="text-purple-700">
-              Anda telah memberikan suara pada pemilihan ini.
-            </p>
+          {/* Additional status messages */}
+          {votingStatus === 'registered' && !canVote && (
+            <div className="mt-3 text-sm text-gray-600">
+              {election.status !== 'active' && (
+                <p>Pemilihan sedang tidak aktif.</p>
+              )}
+              {election.status === 'active' && candidates.length === 0 && (
+                <p>Menunggu kandidat ditambahkan.</p>
+              )}
+              {election.status === 'upcoming' && (
+                <p>Pemilihan akan dimulai pada {formatDate(election.startTime)}.</p>
+              )}
+              {election.status === 'ended' && (
+                <p>Pemilihan sudah berakhir pada {formatDate(election.endTime)}.</p>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -272,7 +502,7 @@ const ElectionDetails = () => {
               candidate={candidate}
               selected={selectedCandidate === candidate.id}
               onSelect={() => setSelectedCandidate(candidate.id)}
-              canVote={votingStatus === 'registered' && election.status === 'active'}
+              canVote={canVote}
               hasVoted={votingStatus === 'voted'}
               showVoteCount={votingStatus === 'voted' || election.status === 'ended'}
             />
@@ -281,8 +511,25 @@ const ElectionDetails = () => {
       )}
       
       {/* Voting Action */}
-      {votingStatus === 'registered' && election.status === 'active' && (
-        <div className="mt-6 text-center">
+      {canVote && (
+        <div className="mt-6 text-center bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4">Berikan Suara Anda</h3>
+          
+          {!selectedCandidate && (
+            <p className="text-gray-600 mb-4">Silakan pilih kandidat terlebih dahulu</p>
+          )}
+          
+          {selectedCandidate && (
+            <div className="mb-4 p-3 bg-blue-50 rounded">
+              <p className="text-blue-800">
+                Anda akan memberikan suara untuk: 
+                <span className="font-bold">
+                  {candidates.find(c => c.id == selectedCandidate)?.name}
+                </span>
+              </p>
+            </div>
+          )}
+          
           <button
             onClick={castVote}
             disabled={!selectedCandidate || votingInProgress}
@@ -292,8 +539,16 @@ const ElectionDetails = () => {
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {votingInProgress ? 'Memproses...' : 'Berikan Suara'}
+            {votingInProgress ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Memproses...
+              </div>
+            ) : (
+              'Berikan Suara'
+            )}
           </button>
+          
           <p className="text-sm text-gray-500 mt-2">
             Pastikan pilihan Anda sudah benar. Suara tidak dapat dibatalkan atau diubah.
           </p>
@@ -319,32 +574,34 @@ const ElectionDetails = () => {
 const CandidateCard = ({ candidate, selected, onSelect, canVote, hasVoted, showVoteCount }) => {
   return (
     <div 
-      className={`bg-white rounded-lg shadow-md overflow-hidden border-2 ${
-        selected ? 'border-blue-500' : 'border-transparent'
-      } transition-all duration-200`}
+      className={`bg-white rounded-lg shadow-md overflow-hidden border-2 transition-all duration-200 ${
+        selected ? 'border-blue-500 shadow-lg' : 'border-transparent hover:border-gray-200'
+      } ${canVote ? 'cursor-pointer' : ''}`}
       onClick={canVote ? onSelect : undefined}
     >
-      <div className={`p-5 ${canVote ? 'cursor-pointer' : ''}`}>
+      <div className="p-5">
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-xl font-bold text-gray-800">{candidate.name}</h3>
+          
           {selected && canVote && (
             <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
               Dipilih
             </span>
           )}
-          {hasVoted && showVoteCount && (
+          
+          {showVoteCount && (
             <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
               {candidate.voteCount} Suara
             </span>
           )}
         </div>
         
-        <p className="text-gray-600">{candidate.details}</p>
+        <p className="text-gray-600 mb-4">{candidate.details}</p>
         
         {canVote && (
-          <div className="mt-4 flex items-center">
-            <div className={`w-5 h-5 rounded-full border-2 mr-2 flex items-center justify-center ${
-              selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+          <div className="flex items-center">
+            <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center transition-colors ${
+              selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 hover:border-blue-400'
             }`}>
               {selected && (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
@@ -355,12 +612,6 @@ const CandidateCard = ({ candidate, selected, onSelect, canVote, hasVoted, showV
             <span className="text-sm text-gray-600">
               {selected ? 'Kandidat dipilih' : 'Pilih kandidat ini'}
             </span>
-          </div>
-        )}
-        
-        {showVoteCount && !hasVoted && (
-          <div className="mt-4">
-            <span className="text-purple-800 font-medium">{candidate.voteCount} Suara</span>
           </div>
         )}
       </div>
