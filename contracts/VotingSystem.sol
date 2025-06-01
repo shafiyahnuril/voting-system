@@ -178,10 +178,11 @@ contract VotingSystem {
             require(nikBytes[i] >= 0x30 && nikBytes[i] <= 0x39, "NIK must be numeric");
         }
 
-        // Create NIK hash
-        string memory nikHash = _createNIKHash(_nik, msg.sender);
+        // Simple NIK hash creation
+        bytes32 nikHashBytes = keccak256(abi.encodePacked(_nik, msg.sender));
+        string memory nikHash = string(abi.encodePacked(nikHashBytes));
+        
         require(!usedNIKHashes[nikHash], "NIK already used");
-
         usedNIKHashes[nikHash] = true;
 
         // Create request ID
@@ -200,24 +201,7 @@ contract VotingSystem {
         emit VoterVerified(_electionId, msg.sender, true);
     }
 
-    // Helper function to create NIK hash
-    function _createNIKHash(string memory _nik, address _sender) private pure returns (string memory) {
-        bytes32 hash = keccak256(abi.encodePacked(_nik, _sender));
-        return _bytes32ToString(hash);
-    }
 
-    // Helper function to convert bytes32 to string
-    function _bytes32ToString(bytes32 _bytes32) private pure returns (string memory) {
-        uint8 i = 0;
-        while(i < 32 && _bytes32[i] != 0) {
-            i++;
-        }
-        bytes memory bytesArray = new bytes(i);
-        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
-            bytesArray[i] = _bytes32[i];
-        }
-        return string(bytesArray);
-    }
 
     // Cast vote
     function castVote(uint256 _electionId, uint256 _candidateId) external noReentrant {

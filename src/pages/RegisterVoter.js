@@ -146,27 +146,90 @@ const RegisterVoter = () => {
       toast.error("Nama lengkap tidak boleh kosong");
       return;
     }
+
+    // Validate NIK is numeric
+    if (!/^\d{16}$/.test(nik)) {
+      toast.error("NIK harus terdiri dari 16 digit angka");
+      return;
+    }
     
     try {
       setSubmitting(true);
-      
-      // Panggil fungsi registerVoter pada smart contract
-      // Mengirim NIK dan nama langsung ke smart contract
-      await contract.methods.registerVoter(
-        selectedElectionId, 
-        accounts[0], 
-        fullName, 
-        nik
-      ).send({ from: accounts[0] });
-      
+      console.log('🔄 Starting registration with data:', {
+        electionId: selectedElectionId,
+        account: accounts[0],
+        name: fullName,
+        nik: nik.substring(0, 4) + '****' // Log NIK with mask
+      });
+
+      // Check if contract and method exists
+      if (!contract || !contract.methods || !contract.methods.registerVoter) {
+        throw new Error("Contract atau method registerVoter tidak tersedia");
+      }
+
+      // Estimate gas first
+      console.log('⛽ Estimating gas...');
+      const gasEstimate = await contract.methods
+        .registerVoter(selectedElectionId, fullName, nik)
+        .estimateGas({ from: accounts[0] });
+
+      console.log('⛽ Gas estimate:', gasEstimate);
+
+      // Send transaction
+      console.log('📤 Sending registration transaction...');
+      const result = await contract.methods
+        .registerVoter(selectedElectionId, fullName, nik)
+        .send({ 
+          from: accounts[0],
+          gas: Math.floor(gasEstimate * 1.5) // Add 50% buffer
+        });
+
+      console.log('✅ Registration successful:', result);
       toast.success("Pendaftaran berhasil!");
       
       // Redirect ke halaman detail pemilihan
       navigate(`/elections/${selectedElectionId}`);
       
     } catch (error) {
-      console.error("Error registering voter:", error);
-      toast.error("Gagal mendaftar. Silakan coba lagi.");
+      console.error("❌ Registration error:", error);
+      
+      let errorMessage = "Gagal mendaftar. ";
+      
+      // Handle specific errors
+      if (error.message.includes('User denied')) {
+        errorMessage = "Transaksi dibatalkan oleh pengguna";
+      } else if (error.message.includes('revert')) {
+        // Extract revert reason
+        if (error.message.includes('Already registered')) {
+          errorMessage = "Anda sudah terdaftar untuk pemilihan ini";
+        } else if (error.message.includes('Invalid election')) {
+          errorMessage = "ID pemilihan tidak valid";
+        } else if (error.message.includes('NIK must be 16 digits')) {
+          errorMessage = "NIK harus 16 digit";
+        } else if (error.message.includes('NIK must be numeric')) {
+          errorMessage = "NIK harus berisi angka saja";
+        } else if (error.message.includes('NIK already used')) {
+          errorMessage = "NIK sudah digunakan untuk pemilihan ini";
+        } else if (error.message.includes('Name required')) {
+          errorMessage = "Nama lengkap wajib diisi";
+        } else {
+          // Try to extract revert reason
+          const revertMatch = error.message.match(/revert (.+?)(?:\"|$)/);
+          if (revertMatch) {
+            errorMessage = `Error: ${revertMatch[1]}`;
+          } else {
+            errorMessage = "Transaksi ditolak oleh smart contract";
+          }
+        }
+      } else if (error.message.includes('gas')) {
+        errorMessage = "Gas tidak cukup atau gas limit terlalu rendah";
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = "Saldo ETH tidak mencukupi untuk gas fee";
+      } else {
+        errorMessage += error.message || "Silakan coba lagi";
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
