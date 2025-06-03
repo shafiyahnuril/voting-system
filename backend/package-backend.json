@@ -1,37 +1,32 @@
 {
-  "name": "blockchain-voting-backend",
-  "version": "1.0.0",
-  "description": "Backend services for blockchain voting system",
-  "main": "oracle-service.js",
+  "name": "blockchain-voting-backend-enhanced",
+  "version": "1.2.0",
+  "description": "Enhanced backend services for blockchain voting system with REST API and Oracle service",
+  "main": "server.js",
   "scripts": {
-    "start": "node oracle-service.js",
-    "dev": "nodemon oracle-service.js",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "debug": "node --inspect server.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:oracle": "node test-oracle.js",
+    "test:voting": "node test-voting-flow.js",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
     "setup": "node setup-development.js",
     "compile": "truffle compile",
     "migrate": "truffle migrate",
     "migrate:reset": "truffle migrate --reset",
-    "test": "truffle test",
     "ganache": "ganache-cli --host 0.0.0.0 --port 8545 --deterministic --accounts 10 --defaultBalanceEther 100",
     "deploy:local": "npm run compile && npm run migrate:reset",
-    "full-setup": "npm run ganache & sleep 5 && npm run setup"
-  },
-  "dependencies": {
-    "web3": "^1.8.2",
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.0.3",
-    "axios": "^1.3.4",
-    "crypto": "^1.0.1",
-    "helmet": "^6.0.1",
-    "morgan": "^1.10.0",
-    "winston": "^3.8.2"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.20",
-    "truffle": "^5.7.9",
-    "ganache-cli": "^6.12.2",
-    "@truffle/hdwallet-provider": "^2.1.5",
-    "@openzeppelin/contracts": "^4.8.1"
+    "full-setup": "concurrently \"npm run ganache\" \"sleep 10 && npm run setup\"",
+    "docker:build": "docker build -t voting-backend .",
+    "docker:run": "docker run -p 3001:3001 voting-backend",
+    "logs:error": "tail -f logs/error.log",
+    "logs:combined": "tail -f logs/combined.log",
+    "health": "curl http://localhost:3001/health",
+    "docs": "swagger-jsdoc -d swagger.json -o ./docs/api.json",
+    "load-test": "artillery run load-test.yml"
   },
   "keywords": [
     "blockchain",
@@ -39,8 +34,118 @@
     "ethereum",
     "smart-contracts",
     "oracle",
-    "nik-verification"
+    "nik-verification",
+    "rest-api",
+    "express",
+    "web3"
   ],
-  "author": "Your Name",
-  "license": "MIT"
+  "author": "Blockchain Voting Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "express-rate-limit": "^6.10.0",
+    "web3": "^1.10.4",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "compression": "^1.7.4",
+    "dotenv": "^16.3.1",
+    "winston": "^3.10.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "axios": "^1.5.0",
+    "uuid": "^9.0.0",
+    "crypto": "^1.0.1",
+    "joi": "^17.9.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "morgan": "^1.10.0",
+    "moment": "^2.29.4",
+    "lodash": "^4.17.21",
+    "async": "^3.2.4",
+    "node-cron": "^3.0.2",
+    "events": "^3.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.6.4",
+    "supertest": "^6.3.3",
+    "eslint": "^8.47.0",
+    "eslint-config-node": "^4.1.0",
+    "eslint-plugin-jest": "^27.2.3",
+    "prettier": "^3.0.2",
+    "husky": "^8.0.3",
+    "lint-staged": "^14.0.1",
+    "concurrently": "^8.2.1",
+    "artillery": "^2.0.1",
+    "truffle": "^5.11.5",
+    "ganache-cli": "^6.12.2",
+    "@truffle/hdwallet-provider": "^2.1.15",
+    "@openzeppelin/contracts": "^4.9.3",
+    "sinon": "^15.2.0",
+    "nock": "^13.3.2",
+    "nyc": "^15.1.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!node_modules/**",
+      "!coverage/**",
+      "!logs/**",
+      "!test/**",
+      "!*.config.js"
+    ],
+    "testMatch": [
+      "**/test/**/*.test.js",
+      "**/__tests__/**/*.js"
+    ],
+    "setupFilesAfterEnv": ["<rootDir>/test/setup.js"]
+  },
+  "eslintConfig": {
+    "extends": ["eslint:recommended", "node"],
+    "env": {
+      "node": true,
+      "es2022": true,
+      "jest": true
+    },
+    "parserOptions": {
+      "ecmaVersion": "latest",
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-console": "off",
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+      "prefer-const": "error",
+      "no-var": "error"
+    }
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm test"
+    }
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/blockchain-voting-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/blockchain-voting-backend/issues"
+  },
+  "homepage": "https://github.com/your-org/blockchain-voting-backend#readme"
 }
