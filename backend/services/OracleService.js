@@ -1,55 +1,16 @@
-// backend/services/OracleService.js - Enhanced NIK Verification Oracle Service
-const Web3 = require('web3');
+// backend/services/OracleServiceEnhanced.js - Enhanced Oracle Service
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+const { logger } = require('../middleware/requestLogger');
 
-// Oracle Contract ABI
-const ORACLE_ABI = [
-  {
-    "inputs": [{"internalType": "bytes32", "name": "_requestId", "type": "bytes32"}, {"internalType": "bool", "name": "_isValid", "type": "bool"}],
-    "name": "completeVerification",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"internalType": "bytes32", "name": "_requestId", "type": "bytes32"}],
-    "name": "getVerificationRequest",
-    "outputs": [{"internalType": "address", "name": "requester", "type": "address"}, {"internalType": "bool", "name": "processed", "type": "bool"}, {"internalType": "bool", "name": "isValid", "type": "bool"}, {"internalType": "uint256", "name": "timestamp", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [{"internalType": "string", "name": "_nik", "type": "string"}, {"internalType": "string", "name": "_nama", "type": "string"}],
-    "name": "verifyNIK",
-    "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "anonymous": false,
-    "inputs": [{"indexed": true, "internalType": "bytes32", "name": "requestId", "type": "bytes32"}, {"indexed": true, "internalType": "address", "name": "requester", "type": "address"}, {"indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256"}],
-    "name": "VerificationRequested",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [{"indexed": true, "internalType": "bytes32", "name": "requestId", "type": "bytes32"}, {"indexed": false, "internalType": "bool", "name": "isValid", "type": "bool"}],
-    "name": "VerificationCompleted",
-    "type": "event"
-  }
-];
-
-class OracleService extends EventEmitter {
+class EnhancedOracleService extends EventEmitter {
   constructor() {
     super();
-    this.web3 = null;
-    this.oracleContract = null;
-    this.account = null;
-    this.isInitialized = false;
-    this.verificationRequests = new Map(); // In-memory storage for demo
+    this.verificationRequests = new Map();
     this.processingQueue = [];
+    this.isProcessing = false;
     this.stats = {
       totalRequests: 0,
       completedRequests: 0,
@@ -58,131 +19,38 @@ class OracleService extends EventEmitter {
       failedVerifications: 0,
       averageProcessingTime: 0
     };
-  }
-
-  async initialize() {
-    try {
-      console.log('🔮 Initializing OracleService...');
-
-      // Initialize Web3
-      const rpcUrl = process.env.RPC_URL || 'http://localhost:8545';
-      this.web3 = new Web3(rpcUrl);
-
-      // Test connection
-      const blockNumber = await this.web3.eth.getBlockNumber();
-      console.log(`✅ Oracle connected to blockchain - Block: ${blockNumber}`);
-
-      // Get oracle contract address
-      const oracleAddress = process.env.ORACLE_CONTRACT_ADDRESS;
-      if (oracleAddress && oracleAddress !== '') {
-        try {
-          this.oracleContract = new this.web3.eth.Contract(ORACLE_ABI, oracleAddress);
-          console.log(`✅ Oracle contract initialized at: ${oracleAddress}`);
-        } catch (error) {
-          console.warn('⚠️ Oracle contract not available, running in simulation mode');
-        }
-      } else {
-        console.warn('⚠️ Oracle contract address not configured, running in simulation mode');
-      }
-
-      // Setup account for oracle operations
-      const privateKey = process.env.ORACLE_PRIVATE_KEY;
-      if (privateKey) {
-        this.account = this.web3.eth.accounts.privateKeyToAccount(privateKey);
-        this.web3.eth.accounts.wallet.add(this.account);
-        console.log(`✅ Oracle account: ${this.account.address}`);
-      } else {
-        // Fallback to first available account
-        const accounts = await this.web3.eth.getAccounts();
-        if (accounts.length > 0) {
-          this.account = { address: accounts[0] };
-          console.log(`✅ Using fallback account: ${this.account.address}`);
-        }
-      }
-
-      // Setup event listeners for oracle contract
-      if (this.oracleContract) {
-        this.setupEventListeners();
-      }
-
-      // Start processing queue
-      this.startProcessingQueue();
-
-      this.isInitialized = true;
-      console.log('✅ OracleService initialized successfully');
-
-    } catch (error) {
-      console.error('❌ OracleService initialization failed:', error);
-      throw error;
-    }
-  }
-
-  setupEventListeners() {
-    if (!this.oracleContract) return;
-
-    console.log('🔄 Setting up Oracle event listeners...');
-
-    // Listen for verification requests
-    const verificationRequestedListener = this.oracleContract.events.VerificationRequested({
-      fromBlock: 'latest'
-    });
-
-    verificationRequestedListener.on('data', (event) => {
-      console.log('📝 VerificationRequested event:', event.returnValues);
-      this.handleVerificationRequestEvent(event);
-    });
-
-    verificationRequestedListener.on('error', (error) => {
-      console.error('❌ Error in VerificationRequested listener:', error);
-    });
-
-    console.log('✅ Oracle event listeners setup complete');
-  }
-
-  async handleVerificationRequestEvent(event) {
-    const { requestId, requester, timestamp } = event.returnValues;
     
-    console.log(`🔄 Processing verification request: ${requestId}`);
+    this.initializeService();
+  }
 
+  async initializeService() {
+    logger.info('🔮 Initializing Enhanced Oracle Service...');
+    
+    // Start queue processor
+    this.startQueueProcessor();
+    
+    // Setup health monitoring
+    this.setupHealthMonitoring();
+    
+    logger.info('✅ Enhanced Oracle Service initialized');
+  }
+
+  // Enhanced NIK verification request
+  async requestNIKVerification({ nik, name, walletAddress, electionId, metadata = {} }) {
     try {
-      // Get request details from contract
-      const requestDetails = await this.oracleContract.methods
-        .getVerificationRequest(requestId)
-        .call();
-
-      if (requestDetails.processed) {
-        console.log(`⚠️ Request ${requestId} already processed`);
-        return;
-      }
-
-      // Add to processing queue
-      this.processingQueue.push({
+      const requestId = uuidv4();
+      
+      logger.info('🔄 Creating NIK verification request', {
         requestId,
-        requester,
-        timestamp: parseInt(timestamp),
-        createdAt: new Date().toISOString()
+        walletAddress,
+        electionId,
+        hasMetadata: Object.keys(metadata).length > 0
       });
 
-      console.log(`✅ Added request ${requestId} to processing queue`);
-
-    } catch (error) {
-      console.error(`❌ Error handling verification request ${requestId}:`, error);
-    }
-  }
-
-  async requestNIKVerification({ nik, name, walletAddress, electionId, metadata = {} }) {
-    this.ensureInitialized();
-
-    try {
-      // Generate unique request ID
-      const requestId = this.generateRequestId(nik, walletAddress, Date.now());
-      
-      console.log(`🔄 Creating NIK verification request: ${requestId}`);
-
-      // Create verification request record
+      // Create enhanced verification request
       const verificationRequest = {
         requestId,
-        nik: this.hashNIK(nik), // Store hashed NIK for privacy
+        nik: this.hashNIK(nik),
         name,
         walletAddress,
         electionId,
@@ -190,9 +58,17 @@ class OracleService extends EventEmitter {
         isVerified: false,
         createdAt: new Date().toISOString(),
         completedAt: null,
-        metadata,
+        metadata: {
+          ...metadata,
+          ipAddress: metadata.ip,
+          userAgent: metadata.userAgent,
+          sessionId: metadata.sessionId,
+          requestSource: 'api'
+        },
         processingStartedAt: null,
-        estimatedCompletion: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes
+        estimatedCompletion: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        retryCount: 0,
+        priority: this.calculatePriority({ electionId, walletAddress })
       };
 
       // Store request
@@ -200,33 +76,8 @@ class OracleService extends EventEmitter {
       this.stats.totalRequests++;
       this.stats.pendingRequests++;
 
-      // If oracle contract is available, create on-chain request
-      if (this.oracleContract && this.account) {
-        try {
-          console.log('📝 Creating on-chain verification request...');
-          
-          const result = await this.oracleContract.methods
-            .verifyNIK(nik, name)
-            .send({
-              from: this.account.address,
-              gas: 300000
-            });
-
-          console.log(`✅ On-chain request created: ${result.transactionHash}`);
-          
-          // Update request with transaction details
-          verificationRequest.onChainRequestTx = result.transactionHash;
-          verificationRequest.blockNumber = result.blockNumber;
-          
-        } catch (error) {
-          console.warn('⚠️ Failed to create on-chain request, proceeding with off-chain only:', error.message);
-        }
-      }
-
-      // Start verification process immediately for demo
-      setTimeout(() => {
-        this.processVerificationRequest(requestId, nik, name);
-      }, 1000);
+      // Add to processing queue
+      this.addToQueue(verificationRequest);
 
       // Emit event
       this.emit('verificationRequested', {
@@ -234,6 +85,11 @@ class OracleService extends EventEmitter {
         walletAddress,
         electionId,
         timestamp: verificationRequest.createdAt
+      });
+
+      logger.info('✅ NIK verification request created', {
+        requestId,
+        queuePosition: this.processingQueue.length
       });
 
       return {
@@ -244,41 +100,44 @@ class OracleService extends EventEmitter {
       };
 
     } catch (error) {
-      console.error('❌ Error requesting NIK verification:', error);
+      logger.error('❌ Error creating NIK verification request', { error: error.message });
       throw error;
     }
   }
 
+  // Enhanced verification processing
   async processVerificationRequest(requestId, nik, name) {
-    try {
-      console.log(`🔄 Processing verification request: ${requestId}`);
+    const request = this.verificationRequests.get(requestId);
+    if (!request) {
+      throw new Error(`Request ${requestId} not found`);
+    }
 
-      const request = this.verificationRequests.get(requestId);
-      if (!request) {
-        console.error(`❌ Request ${requestId} not found`);
-        return;
-      }
+    try {
+      logger.info('🔄 Processing verification request', { requestId });
 
       // Update status to processing
       request.status = 'processing';
       request.processingStartedAt = new Date().toISOString();
       this.verificationRequests.set(requestId, request);
 
-      // Simulate verification process with realistic delays
-      await this.delay(2000); // Initial processing delay
+      // Simulate realistic processing steps
+      await this.delay(1000);
 
-      // Step 1: Validate NIK format
+      // Step 1: NIK format validation
       request.status = 'validating';
       this.verificationRequests.set(requestId, request);
-      await this.delay(1000);
+      await this.delay(500);
 
       const isValidFormat = this.validateNIKFormat(nik);
       if (!isValidFormat) {
-        await this.completeVerification(requestId, false, 'Invalid NIK format');
+        await this.completeVerification(requestId, false, 'Invalid NIK format', {
+          step: 'format_validation',
+          details: 'NIK format does not meet requirements'
+        });
         return;
       }
 
-      // Step 2: Simulate government API call
+      // Step 2: Government API verification
       request.status = 'verifying';
       this.verificationRequests.set(requestId, request);
       await this.delay(2000);
@@ -286,126 +145,174 @@ class OracleService extends EventEmitter {
       const verificationResult = await this.verifyWithGovernmentAPI(nik, name);
 
       // Step 3: Complete verification
-      await this.completeVerification(requestId, verificationResult.isValid, verificationResult.reason);
+      await this.completeVerification(
+        requestId, 
+        verificationResult.isValid, 
+        verificationResult.reason,
+        verificationResult.metadata
+      );
 
     } catch (error) {
-      console.error(`❌ Error processing verification ${requestId}:`, error);
+      logger.error('❌ Error processing verification', { requestId, error: error.message });
       await this.completeVerification(requestId, false, `Processing error: ${error.message}`);
     }
   }
 
+  // Enhanced government API verification
   async verifyWithGovernmentAPI(nik, name) {
     try {
-      console.log('🌐 Simulating government API verification...');
+      logger.info('🌐 Simulating government API verification');
 
-      // Simulate API call delay
-      await this.delay(1500);
+      // Simulate API call with retry logic
+      const maxRetries = 3;
+      let attempt = 0;
+      let result = null;
 
-      // Simulate verification logic
-      // In real implementation, this would call actual government API
-      const isValid = this.simulateNIKVerification(nik, name);
-      
-      const confidenceScore = isValid ? 
-        Math.random() * 0.2 + 0.8 : // 80-100% for valid
-        Math.random() * 0.3;       // 0-30% for invalid
+      while (attempt < maxRetries) {
+        try {
+          await this.delay(1000 + (attempt * 500)); // Increasing delay
 
-      return {
-        isValid,
-        reason: isValid ? 'NIK verified successfully' : 'NIK not found in government database',
-        confidenceScore,
-        verificationMethod: 'simulated_government_api',
-        apiResponseTime: 1500
-      };
+          // Enhanced simulation with more realistic patterns
+          const isValid = this.simulateEnhancedNIKVerification(nik, name);
+          
+          const confidenceScore = isValid ? 
+            Math.random() * 0.15 + 0.85 : // 85-100% for valid
+            Math.random() * 0.25;         // 0-25% for invalid
+
+          result = {
+            isValid,
+            reason: isValid ? 'NIK verified successfully with government database' : 
+                   'NIK not found or name mismatch in government records',
+            confidenceScore,
+            verificationMethod: 'government_api_simulation',
+            apiResponseTime: 1000 + (attempt * 500),
+            attemptNumber: attempt + 1,
+            metadata: {
+              apiEndpoint: 'dukcapil.api.simulation',
+              requestTimestamp: new Date().toISOString(),
+              regionCode: nik.substring(0, 2),
+              birthDate: this.extractBirthDateFromNIK(nik)
+            }
+          };
+
+          logger.info('✅ Government API verification completed', {
+            isValid: result.isValid,
+            confidenceScore: result.confidenceScore,
+            attempts: attempt + 1
+          });
+
+          break;
+
+        } catch (apiError) {
+          attempt++;
+          logger.warn(`⚠️ API attempt ${attempt} failed`, { error: apiError.message });
+          
+          if (attempt >= maxRetries) {
+            throw new Error(`Government API verification failed after ${maxRetries} attempts`);
+          }
+        }
+      }
+
+      return result;
 
     } catch (error) {
-      console.error('❌ Government API verification failed:', error);
+      logger.error('❌ Government API verification failed', { error: error.message });
       return {
         isValid: false,
         reason: `API verification failed: ${error.message}`,
         confidenceScore: 0,
-        verificationMethod: 'error',
-        apiResponseTime: 0
+        verificationMethod: 'api_error',
+        apiResponseTime: 0,
+        metadata: {
+          errorType: 'api_failure',
+          errorMessage: error.message
+        }
       };
     }
   }
 
-  simulateNIKVerification(nik, name) {
-    // Simulation logic for demo purposes
-    // In production, this would interface with real government databases
+  // Enhanced NIK simulation with more realistic patterns
+  simulateEnhancedNIKVerification(nik, name) {
+    // More sophisticated validation rules
+    const regionCode = nik.substring(0, 2);
+    const birthDate = nik.substring(6, 12);
+    const genderCode = parseInt(nik.substring(6, 8));
     
-    // Basic validation rules for demonstration:
-    // 1. NIK starting with '32' (Central Java) are considered valid
-    // 2. Names longer than 3 characters are more likely to be valid
-    // 3. Add some randomness for realistic simulation
+    // Region validation (Indonesian province codes)
+    const validRegions = [
+      '11', '12', '13', '14', '15', '16', '17', '18', '19', // Sumatera
+      '21', '22', '23', '24', '25', '26', '27', '28', '29', // Sumatera continued
+      '31', '32', '33', '34', '35', '36',                   // Jawa
+      '51', '52', '53',                                     // Bali, NTB, NTT
+      '61', '62', '63', '64',                               // Kalimantan
+      '71', '72', '73', '74', '75', '76',                   // Sulawesi
+      '81', '82', '91', '92', '93', '94'                    // Maluku, Papua
+    ];
+
+    const regionValid = validRegions.includes(regionCode);
     
-    const nikStartsWithValidRegion = nik.startsWith('32') || nik.startsWith('33');
-    const nameIsReasonable = name.length >= 3;
-    const randomFactor = Math.random() > 0.1; // 90% success rate for valid-looking data
+    // Date validation
+    const day = parseInt(nik.substring(6, 8));
+    const month = parseInt(nik.substring(8, 10));
+    const year = parseInt(nik.substring(10, 12));
     
-    // Special test cases for demo
-    if (nik === '1234567890123456') return true;  // Always valid test NIK
-    if (nik === '0000000000000000') return false; // Always invalid test NIK
+    // For females, day is added with 40
+    const actualDay = day > 40 ? day - 40 : day;
+    const dateValid = actualDay >= 1 && actualDay <= 31 && month >= 1 && month <= 12;
     
-    return nikStartsWithValidRegion && nameIsReasonable && randomFactor;
+    // Name validation
+    const nameValid = name.length >= 3 && /^[a-zA-Z\s.'-]+$/.test(name);
+    
+    // Special test cases
+    if (nik === '1234567890123456' && name.toLowerCase().includes('test')) return true;
+    if (nik === '0000000000000000') return false;
+    
+    // Central Java (32, 33) has higher success rate for demo
+    const regionBonus = ['32', '33'].includes(regionCode) ? 0.2 : 0;
+    
+    // Calculate overall probability
+    const baseSuccess = 0.75; // 75% base success rate
+    const regionFactor = regionValid ? 0.1 : -0.3;
+    const dateFactor = dateValid ? 0.05 : -0.2;
+    const nameFactor = nameValid ? 0.05 : -0.1;
+    const randomFactor = (Math.random() - 0.5) * 0.2; // ±10%
+    
+    const successProbability = baseSuccess + regionFactor + dateFactor + nameFactor + regionBonus + randomFactor;
+    
+    return Math.random() < Math.max(0, Math.min(1, successProbability));
   }
 
-  async completeVerification(requestId, isVerified, reason = '') {
+  // Enhanced completion with detailed metadata
+  async completeVerification(requestId, isVerified, reason = '', metadata = {}) {
     try {
-      console.log(`🔄 Completing verification ${requestId}: ${isVerified}`);
-
       const request = this.verificationRequests.get(requestId);
       if (!request) {
-        console.error(`❌ Request ${requestId} not found for completion`);
-        return;
+        throw new Error(`Request ${requestId} not found for completion`);
       }
 
-      // Calculate processing time
       const processingTime = request.processingStartedAt ? 
         new Date() - new Date(request.processingStartedAt) : 0;
 
-      // Update request record
+      // Update request with enhanced data
       request.status = 'completed';
       request.isVerified = isVerified;
       request.completedAt = new Date().toISOString();
       request.reason = reason;
       request.processingTime = processingTime;
+      request.verificationMetadata = {
+        ...metadata,
+        processingDuration: processingTime,
+        completedBy: 'oracle_service',
+        verificationId: uuidv4()
+      };
       
       this.verificationRequests.set(requestId, request);
 
-      // Update stats
-      this.stats.completedRequests++;
-      this.stats.pendingRequests = Math.max(0, this.stats.pendingRequests - 1);
-      
-      if (isVerified) {
-        this.stats.successfulVerifications++;
-      } else {
-        this.stats.failedVerifications++;
-      }
+      // Update statistics
+      this.updateStats(request, processingTime);
 
-      // Update average processing time
-      this.stats.averageProcessingTime = 
-        (this.stats.averageProcessingTime * (this.stats.completedRequests - 1) + processingTime) / 
-        this.stats.completedRequests;
-
-      // Complete verification on blockchain if contract available
-      if (this.oracleContract && this.account) {
-        try {
-          console.log('📝 Completing on-chain verification...');
-          
-          const result = await this.oracleContract.methods
-            .completeVerification(requestId, isVerified)
-            .send({
-              from: this.account.address,
-              gas: 200000
-            });
-
-          console.log(`✅ On-chain verification completed: ${result.transactionHash}`);
-          request.completionTx = result.transactionHash;
-          
-        } catch (error) {
-          console.warn('⚠️ Failed to complete on-chain verification:', error.message);
-        }
-      }
+      // Remove from processing queue
+      this.removeFromQueue(requestId);
 
       // Emit completion event
       this.emit('verificationCompleted', {
@@ -417,42 +324,167 @@ class OracleService extends EventEmitter {
         completedAt: request.completedAt
       });
 
-      console.log(`✅ Verification ${requestId} completed: ${isVerified} (${processingTime}ms)`);
+      logger.info('✅ Verification completed', {
+        requestId,
+        isVerified,
+        processingTime: `${processingTime}ms`,
+        reason
+      });
 
     } catch (error) {
-      console.error(`❌ Error completing verification ${requestId}:`, error);
+      logger.error('❌ Error completing verification', { requestId, error: error.message });
+      throw error;
     }
   }
 
-  async getVerificationStatus(requestId) {
-    this.ensureInitialized();
-
-    const request = this.verificationRequests.get(requestId);
-    if (!request) {
-      return null;
+  // Queue management
+  addToQueue(request) {
+    // Insert based on priority (higher priority first)
+    let insertIndex = this.processingQueue.length;
+    for (let i = 0; i < this.processingQueue.length; i++) {
+      if (request.priority > this.processingQueue[i].priority) {
+        insertIndex = i;
+        break;
+      }
     }
+    this.processingQueue.splice(insertIndex, 0, request);
+  }
+
+  removeFromQueue(requestId) {
+    this.processingQueue = this.processingQueue.filter(req => req.requestId !== requestId);
+  }
+
+  async getQueuePosition(requestId) {
+    const position = this.processingQueue.findIndex(req => req.requestId === requestId);
+    return position >= 0 ? position + 1 : null;
+  }
+
+  async getQueueStatus() {
+    const pending = this.processingQueue.filter(req => req.status === 'pending');
+    const processing = this.processingQueue.filter(req => req.status === 'processing');
+    
+    const averageProcessingTime = this.stats.averageProcessingTime || 180000; // 3 minutes default
+    const estimatedCompletionTime = new Date(Date.now() + (pending.length * averageProcessingTime));
 
     return {
-      requestId: request.requestId,
-      status: request.status,
-      isVerified: request.isVerified,
-      createdAt: request.createdAt,
-      completedAt: request.completedAt,
-      processingTime: request.processingTime,
-      reason: request.reason,
-      electionId: request.electionId,
-      walletAddress: request.walletAddress,
-      verificationMethod: request.metadata?.verificationMethod,
-      confidenceScore: request.metadata?.confidenceScore,
-      error: request.error
+      totalCount: this.processingQueue.length,
+      pending: pending.length,
+      processing: processing.length,
+      averageWaitTime: Math.round(averageProcessingTime / 1000), // seconds
+      estimatedCompletionTime: estimatedCompletionTime.toISOString(),
+      requests: this.processingQueue.slice(0, 10) // Top 10 in queue
     };
+  }
+
+  // Enhanced queue processor
+  startQueueProcessor() {
+    setInterval(async () => {
+      if (this.isProcessing || this.processingQueue.length === 0) {
+        return;
+      }
+
+      this.isProcessing = true;
+      
+      try {
+        const request = this.processingQueue.find(req => req.status === 'pending');
+        if (request) {
+          await this.processVerificationRequest(request.requestId, request.nik, request.name);
+        }
+      } catch (error) {
+        logger.error('❌ Queue processor error', { error: error.message });
+      } finally {
+        this.isProcessing = false;
+      }
+    }, 2000); // Process every 2 seconds
+  }
+
+  // Additional utility methods
+  calculatePriority({ electionId, walletAddress }) {
+    // Higher priority for active elections, special wallets, etc.
+    let priority = 1;
+    
+    if (electionId) {
+      priority += 2; // Election-specific requests have higher priority
+    }
+    
+    // Could add more priority logic here
+    return priority;
+  }
+
+  extractBirthDateFromNIK(nik) {
+    try {
+      const day = parseInt(nik.substring(6, 8));
+      const month = parseInt(nik.substring(8, 10));
+      const year = parseInt(nik.substring(10, 12));
+      
+      // Adjust for female (day > 40)
+      const actualDay = day > 40 ? day - 40 : day;
+      
+      // Determine century (assume 1900s for year > 50, 2000s for year <= 50)
+      const fullYear = year > 50 ? 1900 + year : 2000 + year;
+      
+      return `${fullYear}-${month.toString().padStart(2, '0')}-${actualDay.toString().padStart(2, '0')}`;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  updateStats(request, processingTime) {
+    this.stats.completedRequests++;
+    this.stats.pendingRequests = Math.max(0, this.stats.pendingRequests - 1);
+    
+    if (request.isVerified) {
+      this.stats.successfulVerifications++;
+    } else {
+      this.stats.failedVerifications++;
+    }
+
+    // Update average processing time
+    this.stats.averageProcessingTime = 
+      (this.stats.averageProcessingTime * (this.stats.completedRequests - 1) + processingTime) / 
+      this.stats.completedRequests;
+  }
+
+  async getHealthStatus() {
+    const checks = {
+      queueProcessor: this.processingQueue !== null,
+      memoryUsage: process.memoryUsage().heapUsed < 500 * 1024 * 1024, // < 500MB
+      activeRequests: this.verificationRequests.size < 10000,
+      queueSize: this.processingQueue.length < 1000
+    };
+
+    const dependencies = {
+      database: true, // Would check actual database connection
+      governmentAPI: true, // Would check API availability
+      blockchain: true // Would check blockchain connection
+    };
+
+    return {
+      checks,
+      dependencies,
+      allHealthy: Object.values(checks).every(check => check === true) && 
+                  Object.values(dependencies).every(dep => dep === true)
+    };
+  }
+
+  // Helper methods
+  hashNIK(nik) {
+    return crypto.createHash('sha256').update(nik).digest('hex');
+  }
+
+  validateNIKFormat(nik) {
+    return /^\d{16}$/.test(nik);
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async getActiveVerificationRequest(walletAddress, electionId) {
     for (const [requestId, request] of this.verificationRequests) {
       if (request.walletAddress.toLowerCase() === walletAddress.toLowerCase() &&
           request.electionId == electionId &&
-          (request.status === 'pending' || request.status === 'processing')) {
+          ['pending', 'processing', 'verifying'].includes(request.status)) {
         return {
           requestId,
           status: request.status,
@@ -464,24 +496,56 @@ class OracleService extends EventEmitter {
     return null;
   }
 
-  async getVerificationHistory({ walletAddress, status, electionId, page = 1, limit = 10 }) {
-    this.ensureInitialized();
+  async getRecentRequestsByWallet(walletAddress, timeframeMs) {
+    const cutoff = new Date(Date.now() - timeframeMs);
+    const requests = [];
+    
+    for (const request of this.verificationRequests.values()) {
+      if (request.walletAddress.toLowerCase() === walletAddress.toLowerCase() &&
+          new Date(request.createdAt) > cutoff) {
+        requests.push(request);
+      }
+    }
+    
+    return requests;
+  }
 
+  async checkExistingVerification(nik, electionId) {
+    const nikHash = this.hashNIK(nik);
+    
+    for (const request of this.verificationRequests.values()) {
+      if (request.nik === nikHash &&
+          request.electionId == electionId &&
+          request.status === 'completed' &&
+          request.isVerified) {
+        return {
+          requestId: request.requestId,
+          completedAt: request.completedAt
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  async getVerificationStatus(requestId) {
+    return this.verificationRequests.get(requestId) || null;
+  }
+
+  async getVerificationHistory({ walletAddress, status, electionId, page = 1, limit = 10 }) {
     let requests = Array.from(this.verificationRequests.values());
 
-    // Filter by wallet address
+    // Apply filters
     if (walletAddress) {
       requests = requests.filter(r => 
         r.walletAddress.toLowerCase() === walletAddress.toLowerCase()
       );
     }
 
-    // Filter by status
     if (status) {
       requests = requests.filter(r => r.status === status);
     }
 
-    // Filter by election ID
     if (electionId) {
       requests = requests.filter(r => r.electionId == electionId);
     }
@@ -496,16 +560,7 @@ class OracleService extends EventEmitter {
     const paginatedRequests = requests.slice(startIndex, endIndex);
 
     return {
-      data: paginatedRequests.map(r => ({
-        requestId: r.requestId,
-        status: r.status,
-        isVerified: r.isVerified,
-        electionId: r.electionId,
-        createdAt: r.createdAt,
-        completedAt: r.completedAt,
-        processingTime: r.processingTime,
-        reason: r.reason
-      })),
+      data: paginatedRequests,
       pagination: {
         page,
         limit,
@@ -517,25 +572,6 @@ class OracleService extends EventEmitter {
     };
   }
 
-  async monitorVerification(requestId, { electionId, voterAddress, onComplete }) {
-    const checkStatus = async () => {
-      const status = await this.getVerificationStatus(requestId);
-      
-      if (status && status.status === 'completed') {
-        console.log(`🔔 Verification monitoring complete: ${requestId} -> ${status.isVerified}`);
-        if (onComplete) {
-          onComplete(status.isVerified);
-        }
-        return;
-      }
-
-      // Continue monitoring
-      setTimeout(checkStatus, 5000); // Check every 5 seconds
-    };
-
-    checkStatus();
-  }
-
   async getServiceStats() {
     return {
       ...this.stats,
@@ -543,10 +579,12 @@ class OracleService extends EventEmitter {
       requestsLastHour: this.getRequestsInTimeframe(60 * 60 * 1000),
       currentLoad: this.processingQueue.length,
       serviceUptime: process.uptime(),
-      verificationMethods: ['simulated_government_api'],
+      queueSize: this.processingQueue.length,
+      verificationMethods: ['government_api_simulation'],
       failureReasons: this.getFailureReasons(),
-      geographicDistribution: { 'Indonesia': 100 },
-      lastMaintenanceWindow: null
+      geographicDistribution: this.getGeographicDistribution(),
+      peakHours: this.getPeakHours(),
+      serviceStatus: 'operational'
     };
   }
 
@@ -575,46 +613,42 @@ class OracleService extends EventEmitter {
     return reasons;
   }
 
-  startProcessingQueue() {
-    setInterval(() => {
-      if (this.processingQueue.length > 0) {
-        const request = this.processingQueue.shift();
-        console.log(`🔄 Processing queued request: ${request.requestId}`);
-        // Process request would be handled by event listeners in real implementation
-      }
-    }, 1000);
+  getGeographicDistribution() {
+    return { 'Indonesia': 100 }; // Simplified for demo
   }
 
-  // Utility Methods
-  generateRequestId(nik, walletAddress, timestamp) {
-    const data = `${nik}-${walletAddress}-${timestamp}`;
-    return '0x' + crypto.createHash('sha256').update(data).digest('hex');
-  }
-
-  hashNIK(nik) {
-    return crypto.createHash('sha256').update(nik).digest('hex');
-  }
-
-  validateNIKFormat(nik) {
-    return /^\d{16}$/.test(nik);
-  }
-
-  delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  ensureInitialized() {
-    if (!this.isInitialized) {
-      throw new Error('OracleService not initialized. Call initialize() first.');
+  getPeakHours() {
+    // Analyze request patterns to determine peak hours
+    const hourCounts = {};
+    
+    for (const request of this.verificationRequests.values()) {
+      const hour = new Date(request.createdAt).getHours();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
     }
+    
+    return Object.entries(hourCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([hour, count]) => ({ hour: parseInt(hour), count }));
   }
 
-  async cleanup() {
-    console.log('🔄 Cleaning up OracleService...');
-    this.removeAllListeners();
-    this.verificationRequests.clear();
-    console.log('✅ OracleService cleanup complete');
+  setupHealthMonitoring() {
+    // Monitor memory usage, queue size, etc.
+    setInterval(() => {
+      const memUsage = process.memoryUsage();
+      const queueSize = this.processingQueue.length;
+      
+      if (memUsage.heapUsed > 512 * 1024 * 1024) { // > 512MB
+        logger.warn('High memory usage detected', {
+          heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+        });
+      }
+      
+      if (queueSize > 100) {
+        logger.warn('Large queue size detected', { queueSize });
+      }
+    }, 60000); // Check every minute
   }
 }
 
-module.exports = OracleService;
+module.exports = EnhancedOracleService;

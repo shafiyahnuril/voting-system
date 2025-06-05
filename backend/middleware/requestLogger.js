@@ -140,7 +140,6 @@ module.exports = {
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../middleware/requestLogger');
 
 class EnhancedOracleService extends EventEmitter {
