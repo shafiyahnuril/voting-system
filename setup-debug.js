@@ -4,7 +4,7 @@ const Web3 = require('web3');
 const fs = require('fs');
 const path = require('path');
 
-// Contract ABIs
+// Contract ABI
 const VotingSystemABI = [
   {
     "inputs": [],

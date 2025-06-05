@@ -345,7 +345,7 @@ echo "✅ Fix completed. Restart your frontend: npm start"
   }
 }
 
-// Run diagnostic if called directly
+// Run diagnostic if it called directly
 if (require.main === module) {
   const quickFix = new QuickFix();
   quickFix.runDiagnostic()
