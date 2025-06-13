@@ -289,12 +289,6 @@ Response:
 
 ---
 
-## 📜 License
-
-MIT License — see [LICENSE](LICENSE)
-
----
-
 ## 🙌 Acknowledgments
 
 * OpenZeppelin
