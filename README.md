@@ -316,5 +316,3 @@ MIT License — see [LICENSE](LICENSE)
 * Conduct third-party audits for enhanced security
 
 ---
-
-> *Disclaimer: This is a proof-of-concept for educational use. Production deployments must undergo professional audits and legal compliance.*
